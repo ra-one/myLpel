@@ -10,6 +10,7 @@
 #include <string.h>
 #include <assert.h>
 #include "hrc_buffer.h"
+#include "hrc_lpel.h"
 
 static entry *createEntry(void *data) {
   entry *e = (entry *) malloc(sizeof(entry));

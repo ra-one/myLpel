@@ -11,6 +11,9 @@
 
 #include <lpel_common.h>
 
+#ifdef USE_SCC
+#include "scc_lpel.h"
+#endif /*USE_SCC*/
 
 /* extra task state in HRC */
 #define  TASK_INQUEUE							'Q'

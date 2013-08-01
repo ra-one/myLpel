@@ -1,7 +1,8 @@
-SUBDIRS = include . tests
 if USE_SCC
+SUBDIRS = include .
 include Makefile_scc.am
 else
+SUBDIRS = include . tests
 lib_LTLIBRARIES = liblpel.la liblpel_mon.la liblpel_hrc.la 
 
 liblpel_la_SOURCES = \

@@ -20,6 +20,9 @@
 #include "lpelcfg.h"
 #include "lpel_main.h"
 
+#ifdef USE_SCC
+#include "scc.h"
+#endif /*USE_SCC*/
 
 /**
  * Get the number of available cores
@@ -65,7 +68,11 @@ void LpelInit(lpel_config_t *cfg)
 {
   /* Initialise hardware information for thread pinning */
   LpelHwLocInit(cfg);
-
+#ifdef USE_SCC
+  /* store a local copy of cfg */
+  _lpel_global_config = *cfg;
+  sccInit(0,_lpel_global_config.num_workers);
+#endif /*USE_SCC*/
 #ifdef USE_MCTX_PCL
   int res = co_thread_init();
   /* initialize machine context for main thread */
