@@ -68,7 +68,8 @@ void LpelWorkersInit(int size) {
         if (node_ID == master_ID) {
           /** create master */
           master = (masterctx_t *) malloc(sizeof(masterctx_t));
-          master->mailbox = mbox;
+          //master->mailbox = mbox;
+          master->mailbox = allmbox[node_ID];
           master->ready_tasks = LpelTaskqueueInit ();
           master->num_workers = num_workers;
           /*master do not hold context for workers*/
@@ -81,7 +82,7 @@ void LpelWorkersInit(int size) {
         } else{
           /*create single worker per core*/
           worker=(workerctx_t *) malloc(sizeof(workerctx_t));
-          worker->wid=node_ID;
+          worker->wid=node_ID-1;
 #ifdef USE_LOGGING
           if (MON_CB(worker_create)) {
             worker->mon = MON_CB(worker_create)(worker->wid);
@@ -92,7 +93,8 @@ void LpelWorkersInit(int size) {
           worker->mon = NULL;
 #endif
           /* mailbox */
-          worker->mailbox = mbox;
+          //worker->mailbox = mbox;
+          worker->mailbox = allmbox[node_ID];
           worker->free_sd = NULL;
           worker->free_stream = NULL;
         }
@@ -105,8 +107,10 @@ void LpelWorkersInit(int size) {
 void setupMailbox(mailbox_t **mastermb, mailbox_t **workermbs) {
    int i;
    *mastermb = allmbox[0];
+   WORKER_DBG("\nmastermb %p\n",*mastermb);
    for(i=0;i<num_workers;i++){
     workermbs[i] = allmbox[i+1];
+    WORKER_DBG("workermbs[%d] %p\n",i,workermbs[i]);
    }
 }
 
@@ -127,6 +131,7 @@ void LpelWorkersCleanup(void) {
           /* free workers tables */
           free(master->waitworkers);
           free(master);
+          WORKER_DBG("CLEAN; master finished");
         } else {
           /* wait for the worker to finish */
           (void) pthread_join(worker->thread, NULL);
@@ -134,6 +139,7 @@ void LpelWorkersCleanup(void) {
           LpelWorkerDestroyStream(worker);
           LpelWorkerDestroySd(worker);
           free(worker);
+          WORKER_DBG("CLEAN; worker finished");
         }
         /* clean up local vars used in worker operations */
         cleanupLocalVar();
@@ -160,10 +166,7 @@ void LpelWorkersSpawn(void) {
 void LpelWorkersTerminate(void) {
 	workermsg_t msg;
 	msg.type = WORKER_MSG_TERMINATE;
-	//LpelMailboxSend(master->mailbox, &msg);
-        if (node_ID == master_ID) {
-          LpelWorkerBroadcast(&msg);
-        }
+	LpelMailboxSend(master->mailbox, &msg);
 }
 
 /************************ Private functions ***********************************/

@@ -79,7 +79,8 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 	t->mon = NULL;
 
 	/* function, argument (data), stack base address, stacksize */
-	mctx_create( &t->mctx, TaskStartup, (void*)t, stackaddr, t->size - offset);
+	//mctx_create( &t->mctx, TaskStartup, (void*)t, stackaddr, t->size - offset);
+  t->mctx=co_create(TaskStartup, (void*)t, NULL,8192);
 #ifdef USE_MCTX_PCL
 	assert(t->mctx != NULL);
 #endif

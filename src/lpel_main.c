@@ -66,13 +66,16 @@ int LpelGetNumCores( int *result)
  */
 void LpelInit(lpel_config_t *cfg)
 {
-  /* Initialise hardware information for thread pinning */
-  LpelHwLocInit(cfg);
-#ifdef USE_SCC
   /* store a local copy of cfg */
   _lpel_global_config = *cfg;
+  
+#ifdef USE_SCC
   sccInit(0,_lpel_global_config.num_workers);
+#else
+  /* Initialise hardware information for thread pinning */
+  LpelHwLocInit(cfg);
 #endif /*USE_SCC*/
+
 #ifdef USE_MCTX_PCL
   int res = co_thread_init();
   /* initialize machine context for main thread */
@@ -84,16 +87,13 @@ void LpelInit(lpel_config_t *cfg)
 int LpelStart(lpel_config_t *cfg)
 {
   int res;
-
-  /* store a local copy of cfg */
-  _lpel_global_config = *cfg;
-
+#ifndef USE_SCC
   /* check the config */
   res = LpelHwLocCheckConfig(cfg);
   if (res) return res;
 
   LpelHwLocStart(cfg);
-
+#endif /*USE_SCC*/
   /* initialise workers */
   LpelWorkersInit( _lpel_global_config.num_workers);
 

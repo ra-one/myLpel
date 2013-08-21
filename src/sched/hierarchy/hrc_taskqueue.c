@@ -70,7 +70,7 @@ int searchItem(taskqueue_t *tq, lpel_task_t *t) {
  * Initialise a task queue
  */
 taskqueue_t* LpelTaskqueueInit() {
-  taskqueue_t *tq = (taskqueue_t *)malloc(sizeof(taskqueue_t));
+  taskqueue_t *tq = (taskqueue_t *) malloc(sizeof(taskqueue_t));
   tq->alloc = BLOCKSIZE;
   tq->count = 1;  /* first element in array is not used to simplify indices */
   tq->heap = (lpel_task_t **) malloc(tq->alloc * sizeof(lpel_task_t *));

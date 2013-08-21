@@ -24,6 +24,16 @@ struct lpel_stream_desc_t {
 #define PRODLOCK_LOCK(x)    pthread_spin_lock(x)
 #define PRODLOCK_UNLOCK(x)  pthread_spin_unlock(x)
 
+#elif USE_SCC
+
+#define PRODLOCK_TYPE         pthread_mutex_t
+#define PRODLOCK_INIT(x)      pthread_mutexattr_t attr; pthread_mutexattr_init( &attr);\
+                              pthread_mutexattr_setpshared( &attr, PTHREAD_PROCESS_SHARED);\
+                              pthread_mutex_init(x,&attr);pthread_mutexattr_destroy(&attr) 
+#define PRODLOCK_DESTROY(x)   pthread_mutex_destroy(x)
+#define PRODLOCK_LOCK(x)      DCMflush(); while(pthread_mutex_trylock(x) != 0){DCMflush();}
+#define PRODLOCK_UNLOCK(x)    pthread_mutex_unlock(x);DCMflush()
+
 #else
 
 #define PRODLOCK_TYPE       pthread_mutex_t

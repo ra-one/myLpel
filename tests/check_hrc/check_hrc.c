@@ -113,10 +113,10 @@ static void *Inputter(void *arg)
   do {
     buf = fgets( malloc( 120 * sizeof(char) ), 119, stdin  );
     if (0 != strcmp(buf, "T\n")) {
-    	LpelStreamWrite( out, strcpy(malloc(120 * sizeof(char)), buf));
-    	LpelStreamWrite( out, strcpy(malloc(120 * sizeof(char)), buf));
-    	LpelStreamWrite( out, strcpy(malloc(120 * sizeof(char)), buf));
-    	LpelStreamWrite( out, strcpy(malloc(120 * sizeof(char)), buf));
+    	LpelStreamWrite( out, strcpy( malloc(120 * sizeof(char)), buf));
+    	LpelStreamWrite( out, strcpy( malloc(120 * sizeof(char)), buf));
+    	LpelStreamWrite( out, strcpy( malloc(120 * sizeof(char)), buf));
+    	LpelStreamWrite( out, strcpy( malloc(120 * sizeof(char)), buf));
     }
     LpelStreamWrite( out, buf);
   } while ( 0 != strcmp(buf, "T\n") );

@@ -36,7 +36,7 @@ static mailbox_node_t *GetFree( mailbox_t *mbox)
     mbox->list_free = node->next; /* can be NULL */
   } else {
     /* allocate new node */
-    node = (mailbox_node_t *)malloc( sizeof( mailbox_node_t));
+    node = (mailbox_node_t *) malloc( sizeof( mailbox_node_t));
   }
   pthread_mutex_unlock( &mbox->lock_free);
 
@@ -64,7 +64,7 @@ static void PutFree( mailbox_t *mbox, mailbox_node_t *node)
 
 mailbox_t *LpelMailboxCreate(void)
 {
-  mailbox_t *mbox = (mailbox_t *)malloc(sizeof(mailbox_t));
+  mailbox_t *mbox = (mailbox_t *) malloc(sizeof(mailbox_t));
 
   pthread_mutex_init( &mbox->lock_free,  NULL);
   pthread_mutex_init( &mbox->lock_inbox, NULL);

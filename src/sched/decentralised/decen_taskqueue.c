@@ -22,7 +22,7 @@
  */
 taskqueue_t *LpelTaskqueueInit()
 {
-	taskqueue_t *tq = (taskqueue_t *)malloc(sizeof(taskqueue_t));
+	taskqueue_t *tq = (taskqueue_t *) malloc(sizeof(taskqueue_t));
   tq->head = NULL;
   tq->tail = NULL;
   tq->count = 0;

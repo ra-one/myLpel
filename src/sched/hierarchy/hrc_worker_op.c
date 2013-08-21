@@ -31,7 +31,7 @@
 #include "lpel/monitor.h"
 #include "lpel_main.h"
 
-//#define _USE_WORKER_DBG__
+#define _USE_WORKER_DBG__
 
 #ifdef _USE_WORKER_DBG__
 #define WORKER_DBG printf
@@ -146,7 +146,7 @@ static void sendTask(int wid, lpel_task_t *t) {
 
 static void sendWakeup(mailbox_t *mb, lpel_task_t *t)
 {
-	workermsg_t msg;
+  workermsg_t msg;
 	msg.type = WORKER_MSG_WAKEUP;
 	msg.body.task = t;
 	LpelMailboxSend(mb, &msg);
@@ -203,6 +203,7 @@ static void MasterLoop(masterctx_t *master)
 		workermsg_t msg;
 
 		LpelMailboxRecv(mastermb, &msg);
+    WORKER_DBG("\nmaster: MSG received, handle it!\n");
 		lpel_task_t *t;
 		int wid;
 		switch(msg.type) {
@@ -211,7 +212,7 @@ static void MasterLoop(masterctx_t *master)
 			t = msg.body.task;
 			assert (t->state == TASK_CREATED);
 			t->state = TASK_READY;
-			WORKER_DBG("master: get task %d\n", t->uid);
+			WORKER_DBG("master: got task %d\n", t->uid);
 			if (servePendingReq(master, t) < 0) {		 // no pending request
 				t->sched_info.prior = DBL_MAX; //created task does not set up input/output stream yet, set as highest priority
 				t->state = TASK_INQUEUE;
@@ -221,20 +222,23 @@ static void MasterLoop(masterctx_t *master)
 
 		case WORKER_MSG_RETURN:
 			t = msg.body.task;
-			WORKER_DBG("master: get returned task %d\n", t->uid);
+			WORKER_DBG("master: worker returned task %d\n", t->uid);
 			switch(t->state) {
 			case TASK_BLOCKED:
 				if (t->wakenup == 1) {	/* task has been waked up */
+          WORKER_DBG("task %d was put in ready que\n",t->uid);
 					t->wakenup = 0;
 					t->state = TASK_READY;
 					// no break, task will be treated as if it is returned as ready
 				} else {
+          WORKER_DBG("task %d state was changed to returned\n",t->uid);
 					t->state = TASK_RETURNED;
 					updatePriorityNeigh(master->ready_tasks, t);
 					break;
 				}
 
 			case TASK_READY:	// task yields
+      WORKER_DBG("master: task %d added to ready que\n",t->uid);
 #ifdef _USE_NEG_DEMAND_LIMIT_
 				t->sched_info.prior = LpelTaskCalPriority(t);
 				if (t->sched_info.prior == LPEL_DBL_MIN) {		// if not schedule task if it has too low priority
@@ -252,6 +256,7 @@ static void MasterLoop(masterctx_t *master)
 				break;
 
 			case TASK_ZOMBIE:
+        WORKER_DBG("master: zombie task\n");
 				updatePriorityNeigh(master->ready_tasks, t);
 				LpelTaskDestroy(t);
 				break;
@@ -264,6 +269,7 @@ static void MasterLoop(masterctx_t *master)
 		case WORKER_MSG_WAKEUP:
 			t = msg.body.task;
 			if (t->state != TASK_RETURNED) {		// task has not been returned yet
+        WORKER_DBG("master: put message back, task %d not returned yet\n",t->uid);
 				t->wakenup = 1;		// set task as wakenup so that when returned it will be treated as ready
 				break;
 			}
@@ -291,10 +297,11 @@ static void MasterLoop(masterctx_t *master)
 
 		case WORKER_MSG_REQUEST:
 			wid = msg.body.from_worker;
-			WORKER_DBG("master: request task from worker %d\n", wid);
+			WORKER_DBG("master: task request from worker %d\n", wid);
 			t = LpelTaskqueuePeek(master->ready_tasks);
 			if (t == NULL) {
 				master->waitworkers[wid] = 1;
+        WORKER_DBG("master: worker %d put into wait worker que\n", wid);
 			} else {
 
 #ifdef _USE_NEG_DEMAND_LIMIT_
@@ -304,17 +311,20 @@ static void MasterLoop(masterctx_t *master)
 				}
 #endif
 				t->state = TASK_READY;
+        WORKER_DBG("master: task %d sent to worker %d\n",t->uid, wid);
 				sendTask(wid, t);
 				t = LpelTaskqueuePop(master->ready_tasks);
 			}
 			break;
 
 		case WORKER_MSG_TERMINATE:
+      WORKER_DBG("master: Termination message\n");
 			master->terminate = 1;
 			break;
 		default:
 			assert(0);
 		}
+    WORKER_DBG("master->terminate %d LpelTaskqueueSize %d res %d\n\n",master->terminate, LpelTaskqueueSize(master->ready_tasks),(!(master->terminate && LpelTaskqueueSize(master->ready_tasks) == 0)));
 	} while (!(master->terminate && LpelTaskqueueSize(master->ready_tasks) == 0));
 }
 
@@ -345,7 +355,6 @@ void *MasterThread(void *arg)
 
   // master loop, no monitor for master
   MasterLoop(master);
-
   // master terminated, now terminate worker
   workermsg_t msg;
   msg.type = WORKER_MSG_TERMINATE;
@@ -373,14 +382,16 @@ static void WrapperLoop(workerctx_t *wp)
 		t = wp->current_task;
 		if (t != NULL) {
 			/* execute task */
+      WORKER_DBG("wrapper: switch to task %d\n", t->uid);
 			mctx_switch(&wp->mctx, &t->mctx);
 		} else {
 			/* no ready tasks */
 			LpelMailboxRecv(wp->mailbox, &msg);
+      WORKER_DBG("wrapper: MSG received, handle it!\n");
 			switch(msg.type) {
 			case WORKER_MSG_ASSIGN:
 				t = msg.body.task;
-				WORKER_DBG("wrapper: get task %d\n", t->uid);
+				WORKER_DBG("wrapper: got task %d\n", t->uid);
 				assert(t->state == TASK_CREATED);
 				t->state = TASK_READY;
 				wp->current_task = t;
@@ -530,17 +541,19 @@ static void WorkerLoop(workerctx_t *wc)
 	WORKER_DBG("start worker %d\n", wc->wid);
 
   lpel_task_t *t = NULL;
+  WORKER_DBG("Request work for first time\n");
   requestTask(wc);		// ask for the first time
 
   workermsg_t msg;
   do {
   	  LpelMailboxRecv(wc->mailbox, &msg);
-
+      WORKER_DBG("\nworker: MSG received, handle it!\n");
+      
   	  switch(msg.type) {
   	  case WORKER_MSG_ASSIGN:
   	  	t = msg.body.task;
-  	  	WORKER_DBG("worker %d: get task %d\n", wc->wid, t->uid);
-  	  	assert(t->state == TASK_READY);
+  	  	WORKER_DBG("worker %d: got task %d\n", wc->wid, t->uid);
+        assert(t->state == TASK_READY);
   	  	t->worker_context = wc;
   	  	wc->current_task = t;
 
@@ -558,11 +571,13 @@ static void WorkerLoop(workerctx_t *wc)
 //  	  	if (t->state != TASK_ZOMBIE) {
   	  	wc->current_task = NULL;
   	  		t->worker_context = NULL;
+          WORKER_DBG("worker %d: returned task %d\n", wc->wid, t->uid);
   	  		returnTask(t);
 //  	  	} else
 //  	  		LpelTaskDestroy(t);		// if task finish, destroy it and not return to master
   	  	break;
   	  case WORKER_MSG_TERMINATE:
+        WORKER_DBG("worker: Termination message\n");
   	  	wc->terminate = 1;
   	  	break;
   	  default:
@@ -570,6 +585,7 @@ static void WorkerLoop(workerctx_t *wc)
   	  	break;
   	  }
   	  // reach here --> message request for task has been sent
+      WORKER_DBG("!(wc->terminate) %d\n\n",(!(wc->terminate)));
   } while (!(wc->terminate) );
 }
 
@@ -645,8 +661,8 @@ void LpelWorkerTaskExit(lpel_task_t *t) {
 	}
 	else
 		wc->terminate = 1;		// wrapper: terminate
-
-	mctx_switch(&t->mctx, &wc->mctx);		// switch back to the worker
+  
+  mctx_switch(&t->mctx, &wc->mctx);		// switch back to the worker
 }
 
 
