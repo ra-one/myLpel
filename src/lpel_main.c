@@ -70,7 +70,7 @@ void LpelInit(lpel_config_t *cfg)
   _lpel_global_config = *cfg;
   
 #ifdef USE_SCC
-  sccInit(0,_lpel_global_config.num_workers);
+  //SCCInit(0,_lpel_global_config.num_workers);
 #else
   /* Initialise hardware information for thread pinning */
   LpelHwLocInit(cfg);

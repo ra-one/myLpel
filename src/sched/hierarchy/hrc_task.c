@@ -10,6 +10,7 @@
 #include "hrc_worker.h"
 #include "lpel/monitor.h"
 #include "taskpriority.h"
+#include "scc.h"
 
 static atomic_int taskseq = ATOMIC_VAR_INIT(0);
 static int neg_demand_lim = 0;
@@ -38,9 +39,12 @@ static void TaskStop( lpel_task_t *t);
  * @return the task handle of the created task (pointer to TCB)
  *
  */
+
 lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 		void *inarg, int size)
 {
+  if (!SCCIsMaster()) return NULL;
+   
 	lpel_task_t *t;
 	char *stackaddr;
 	int offset;

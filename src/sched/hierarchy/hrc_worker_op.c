@@ -39,7 +39,9 @@
 #define WORKER_DBG	//
 #endif
 
-
+#ifdef USE_SCC
+#define LpelThreadAssign //
+#endif
 
 /******************* PRIVATE FUNCTIONS *****************************/
 static void addFreeWrapper(workerctx_t *wp);

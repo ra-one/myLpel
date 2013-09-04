@@ -66,6 +66,8 @@ struct lpel_task_t {
   lpel_taskfunc_t func; /** function of the task */
   void *inarg;          /** input argument  */
   void *outarg;         /** output argument  */
+  
+  int dynamic;          /** dynamic task created by all cores, static only by master in SCC*/
 
   /* info supporting scheduling */
   sched_task_t sched_info;

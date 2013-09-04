@@ -61,7 +61,7 @@ void LpelWorkersInit(int size) {
 	num_workers = size - 1;
         
         /*ini mailbox*/
-        node_ID=SccGetNodeID();
+        node_ID=SCCGetNodeID();
         LpelMailboxInit(node_ID,num_workers);
         mailbox_t *mbox =  LpelMailboxCreate();
         
