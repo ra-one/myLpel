@@ -63,6 +63,7 @@ void LpelWorkersInit(int size) {
         /*ini mailbox*/
         node_ID=SCCGetNodeID();
         LpelMailboxInit(node_ID,num_workers);
+        //mailbox_t *mbox =  LpelMailboxCreate();
         mailbox_t *mbox =  LpelMailboxCreate();
         
         if (node_ID == master_ID) {

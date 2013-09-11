@@ -11,12 +11,18 @@ extern uintptr_t  addr;
 extern mailbox_t **allmbox;
 static int node_ID;
 static int size;
-pthread_mutexattr_t attr;
+
 
 /* Utility functions*/
 typedef int bool;
 #define false 0
 #define true  1
+
+#define FLAG_SET    1
+#define FLAG_UNSET  0
+
+typedef int FLAG_STATUS;
+typedef t_vcharp FLAG;
 
 /* mailbox structures */
 
@@ -26,12 +32,10 @@ typedef struct mailbox_node_t {
 } mailbox_node_t;
 
 struct mailbox_t {
-  pthread_mutex_t     lock_free;
-  pthread_mutex_t     lock_inbox;
-  pthread_mutex_t     notempty;
-  mailbox_node_t      *list_free;
-  mailbox_node_t      *list_inbox;
-  int                 mbox_ID;
+  pthread_mutex_t lock_inbox;
+  int             mbox_ID;
+  mailbox_node_t  *list_free;
+  mailbox_node_t  *list_inbox;
 };
 
 //#define _USE_MAILBOX_DBG__
@@ -41,9 +45,6 @@ struct mailbox_t {
 #else
 #define MAILBOX_DBG	//
 #endif
-
-//#define USE_LOCK
-
 
 /******************************************************************************/
 /* Free node pool management functions                                        */
@@ -57,6 +58,7 @@ static mailbox_node_t *GetFree( mailbox_t *mbox)
   if (mbox->list_free != NULL) {
     /* pop free node off */
     node = mbox->list_free;
+    //printf("Mailbox getFree: node->next %p\n",node->next);
     mbox->list_free = node->next; /* can be NULL */
   } else {
     /* allocate new node */
@@ -64,7 +66,7 @@ static mailbox_node_t *GetFree( mailbox_t *mbox)
   }
   DCMflush();
   
-  MAILBOX_DBG("\nnode %p\n",node);
+  //MAILBOX_DBG("\nnode %p\n",node);
   
   return node;
 }
@@ -79,12 +81,13 @@ static void PutFree( mailbox_t *mbox, mailbox_node_t *node)
   }
   mbox->list_free = node;
   DCMflush();
+
 }
 
 static int isMasterMailbox( mailbox_t *mbox)
 {
   //MAILBOX_DBG("allmbox[0] %p mbox %p\n",allmbox[0],mbox);
-  return !(mbox - allmbox[0]);
+  return (mbox->mbox_ID == 0);
 }
 
 /******************************************************************************/
@@ -97,136 +100,96 @@ void LpelMailboxInit(int node_id_num, int num_worker){
   int i;
   allmbox = (mailbox_t**) malloc(sizeof(mailbox_t*)*size);
   for (i=0; i < size;i++){
-    allmbox[i] = addr+(i*(SHM_MEMORY_SIZE/size))+0x11a0;    
-    MAILBOX_DBG("allmbox[%d] %p\n",i,allmbox[i]);
+    //allmbox[i] = addr+(i*(SHM_MEMORY_SIZE/size))+0x11a0;    
+    allmbox[i] = (void*)M_START(i);    
+    printf("allmbox[%d] %p\n",i,allmbox[i]);
   }	
 }
 
 mailbox_t *LpelMailboxCreate(void)
 {
-  //mailbox_t *mbox = (mailbox_t *) malloc(sizeof(mailbox_t));
-  mailbox_t *mbox = malloc(sizeof(mailbox_t));
-
+  //nk is not used
+  mailbox_t *mboxTemp = malloc(sizeof(mailbox_t));
+  mailbox_t *nk,*mbox=mbox_start_addr;
+  pthread_mutexattr_t attr;
+  
   pthread_mutexattr_init( &attr);
   pthread_mutexattr_setpshared( &attr, PTHREAD_PROCESS_SHARED);
-  
-  pthread_mutex_init( &mbox->lock_free,  &attr);
-  pthread_mutex_init( &mbox->lock_inbox, &attr);
-  pthread_mutex_init( &mbox->notempty,   &attr);
-  mbox->list_free  = NULL;
-  mbox->list_inbox = NULL;
-  mbox->mbox_ID=node_ID; 
-  node_ID = -99;
-  MAILBOX_DBG("MAILBOX address: %p mbox_ID %d\n",mbox,mbox->mbox_ID);
+ 
+  mboxTemp->mbox_ID = node_ID--;
+  pthread_mutex_init( &mboxTemp->lock_inbox, &attr);
+  mboxTemp->list_free  = NULL;
+  mboxTemp->list_inbox = NULL;
+  cpy_mailbox_to_mpb((void *)nk, (void *) mboxTemp, sizeof(mailbox_t));
+  //MAILBOX_DBG("\n\nstart_addr %p, return of mbox %p\n\n",mbox_start_addr,mbox);
+  free(mboxTemp);
   DCMflush();
   return mbox;
 }
 
-void LpelMailboxDestroy1( mailbox_t *mbox)
+mailbox_t *LpelMailboxCreateW(void)
 {
-  assert( mbox->list_inbox == NULL);
+  //nk is not used
+  mailbox_t *mbox = malloc(sizeof(mailbox_t));
   
+  pthread_mutexattr_t attr;
   
-  /* destroy sync primitives */
-  pthread_mutex_destroy( &mbox->lock_free);
-  pthread_mutex_destroy( &mbox->lock_inbox);
-  pthread_mutex_destroy( &mbox->notempty);
-
-  free(mbox);
+  pthread_mutexattr_init( &attr);
+  pthread_mutexattr_setpshared( &attr, PTHREAD_PROCESS_SHARED);
   
-  /* destroy an attribute */
-  pthread_mutexattr_destroy(&attr);
-}
-
-void LpelMailboxDestroy( mailbox_t *mbox)
-{
-  mailbox_node_t *node;
-
-  assert( mbox->list_inbox == NULL);
-  /* free all free nodes */
-  DCMflush();/*
-  while(pthread_mutex_trylock(&mbox->lock_free) != 0){
-    DCMflush();
-  }*/
-  
-  while (mbox->list_free != NULL) {
-    /* pop free node off */
-    node = mbox->list_free;  
-    mbox->list_free = node->next; /* can be NULL */
-    /* free the memory for the node */
-    free( node);   
-    DCMflush();
-  }
-  pthread_mutex_unlock( &mbox->lock_free);
+  mbox->mbox_ID = node_ID--;
+  pthread_mutex_init( &mbox->lock_inbox, &attr);
+  mbox->list_free  = NULL;
+  mbox->list_inbox = NULL;
   DCMflush();
-
-  /* destroy sync primitives */
-  pthread_mutex_destroy( &mbox->lock_free);
-  pthread_mutex_destroy( &mbox->lock_inbox);
-  pthread_mutex_destroy( &mbox->notempty);
-
-  free(mbox);
-  
-  /* destroy an attribute */
-  pthread_mutexattr_destroy(&attr);
+  return mbox;
 }
+
+void LpelMailboxDestroy( mailbox_t *mbox){}
 
 void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
 {
   int value=-1;
-  MAILBOX_DBG("Mailbox Send: mbox->mbox_ID %d, mbox %p isMaster(t/f, 1/..) %d\n",mbox->mbox_ID,mbox,isMasterMailbox(mbox));
-  //if (mbox->mbox_ID == master_ID) {
-  if (isMasterMailbox(mbox)) {
-    MAILBOX_DBG("\nMailbox send: Master lock\n");
-#ifdef USE_LOCK
-    lock(47);//lock(mbox->mbox_ID);
-#else // USE_LOCK
+  printf("Mailbox Send: mbox->mbox_ID %d, mbox %p\n",mbox->mbox_ID,mbox);
+  if (mbox->mbox_ID >= 0) {                                   MAILBOX_DBG("\nMailbox send %d: Master lock\n",mbox->mbox_ID);    
     while(value != AIR_MBOX_SYNCH_VALUE){
 		  atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
   	}
-#endif // USE_LOCK
-  } else {
-    MAILBOX_DBG("\nMailbox send: Worker lock\n");
+  }else{                                                         MAILBOX_DBG("\nMailbox send %d: Worker lock\n",mbox->mbox_ID);
     DCMflush();
     while(pthread_mutex_trylock(&mbox->lock_inbox) != 0){
       DCMflush();
     }
     DCMflush();
   }
+
   /* get a free node from recepient */
   mailbox_node_t *node = GetFree( mbox);
 
   /* copy the message */
   node->msg = *msg;
   DCMflush();
+  flush();
   /* put node into inbox */
-  if ( mbox->list_inbox == NULL) {
-    MAILBOX_DBG("\nMailbox send: list_inbox is null\n");
+  if ( mbox->list_inbox == NULL) {                               MAILBOX_DBG("\nMailbox send %d: list_inbox is null\n",mbox->mbox_ID);
     /* list is empty */
     mbox->list_inbox = node;
     node->next = node; /* self-loop */
-  } else {
-    MAILBOX_DBG("\nMailbox send: list_inbox is NOT null\n");
+  } else {                                                       MAILBOX_DBG("\nMailbox send %d: list_inbox is NOT null\n",mbox->mbox_ID);
     /* insert stream between last node=list_inbox
        and first node=list_inbox->next */
     node->next = mbox->list_inbox->next;
     mbox->list_inbox->next = node;
     mbox->list_inbox = node;
   }
-
-  //if (mbox->mbox_ID == master_ID) {
-  if (isMasterMailbox(mbox)) {
-    MAILBOX_DBG("\nMailbox send: Master unlock\n");
-#ifdef USE_LOCK
-    unlock(47);//unlock(mbox->mbox_ID);
-#else //USE_LOCK
+  FOOL_WRITE_COMBINE;
+  
+  if (mbox->mbox_ID >= 0) {                                      MAILBOX_DBG("\nMailbox send %d: Master unlock\n",mbox->mbox_ID);
     atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],AIR_MBOX_SYNCH_VALUE);
-#endif //USE_LOCK
-  } else {
-    MAILBOX_DBG("\nMailbox send: Worker unlock\n");
+  } else {                                                       MAILBOX_DBG("\nMailbox send %d: Worker unlock\n",mbox->mbox_ID);
     pthread_mutex_unlock( &mbox->lock_inbox);
   }
-  DCMflush();
+  DCMflush();  
 }
 
 
@@ -236,23 +199,19 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
   bool message=false;
   bool go_on=false;
   int value=-1;
+  printf("Mailbox Recv: mbox->mbox_ID %d, mbox %p\n",mbox->mbox_ID,mbox);
   MAILBOX_DBG("Mailbox Recv: mbox->mbox_ID %d, mbox %p isMaster(t/f, 1/..) %d\n",mbox->mbox_ID,mbox,isMasterMailbox(mbox));
-  while(go_on==false){sleep(1);
+  while(go_on==false){usleep(1);
+    flush();
     DCMflush();
-    printf(".");fflush(stdout);
-    if(mbox->list_inbox != NULL){
-      //if (mbox->mbox_ID == master_ID){
-      if (isMasterMailbox(mbox)) {
-      MAILBOX_DBG("\nMailbox recv: Master lock\n");
-#ifdef USE_LOCK
-        lock(47);//lock(mbox->mbox_ID);
-#else //USE_LOCK
+    //printf("%d ",mbox->mbox_ID);fflush(stdout);
+    
+    if(mbox->list_inbox != NULL){                             MAILBOX_DBG("\nMailbox Recv %d: list_inbox is not null\n",mbox->mbox_ID);
+      if (mbox->mbox_ID >= 0) {                               MAILBOX_DBG("\nMailbox Recv %d: Master lock\n",mbox->mbox_ID);
         while(value != AIR_MBOX_SYNCH_VALUE){
   				  atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
-  			}
-#endif //USE_LOCK
-      }else{
-        MAILBOX_DBG("\nMailbox recv: Worker lock\n");
+        }
+      }else{                                                     MAILBOX_DBG("\nMailbox Recv %d: Worker lock\n",mbox->mbox_ID);
         DCMflush();
       	while(pthread_mutex_trylock(&mbox->lock_inbox) != 0){
       	  DCMflush();
@@ -260,7 +219,9 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
       	DCMflush();
       }
       go_on=true;
-    }else{MAILBOX_DBG("\nMailbox %d %p inbox is null,mbox->list_inbox %p\n",mbox->mbox_ID,mbox,mbox->list_inbox);}
+    }else{
+      //printf("\nMailbox %d %p inbox is null,mbox->list_inbox %p\n",mbox->mbox_ID,mbox,mbox->list_inbox);
+    }
   }
   
   assert( mbox->list_inbox != NULL);
@@ -273,27 +234,21 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
   } else {
     mbox->list_inbox->next = node->next;
   }
-  //pthread_mutex_unlock( &mbox->lock_inbox);
-
+  
   /* copy the message */
   *msg = node->msg;
 
   /* put node into free pool */
   PutFree( mbox, node);
+  FOOL_WRITE_COMBINE;
   DCMflush();
-  //if (mbox->mbox_ID == master_ID){
-  if (isMasterMailbox(mbox)) {
-    MAILBOX_DBG("\nMailbox recv: Master unlock\n");
-#ifdef USE_LOCK
-    unlock(47);//unlock(mbox->mbox_ID);
-#else //USE_LOCK
+
+  if (mbox->mbox_ID >= 0) {                                     MAILBOX_DBG("\nMailbox Recv %d: Master unlock\n",mbox->mbox_ID);
     atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],AIR_MBOX_SYNCH_VALUE);
-#endif //USE_LOCK
-  }else{
-    MAILBOX_DBG("\nMailbox recv: Worker unlock\n");
+  }else{                                                           MAILBOX_DBG("\nMailbox Recv %d: Worker unlock\n",mbox->mbox_ID);
     pthread_mutex_unlock(&mbox->lock_inbox);
     DCMflush();
-  }
+  }  
 }
 
 /**
@@ -303,6 +258,6 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
  */
 int LpelMailboxHasIncoming( mailbox_t *mbox)
 {
-  DCMflush();
+  flush();
   return ( mbox->list_inbox != NULL);
 }

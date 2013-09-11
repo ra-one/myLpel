@@ -31,7 +31,7 @@
 #include "lpel/monitor.h"
 #include "lpel_main.h"
 
-#define _USE_WORKER_DBG__
+//#define _USE_WORKER_DBG__
 
 #ifdef _USE_WORKER_DBG__
 #define WORKER_DBG printf
@@ -74,6 +74,7 @@ void initLocalVar(int size){
   num_workers = size;
   /* mailboxes */
   workermbs = (mailbox_t **) malloc(sizeof(mailbox_t *) * num_workers);
+  printf("WorkerOP: workermbs %p\n",workermbs);
   setupMailbox(&mastermb, workermbs);
 }
 
@@ -388,6 +389,7 @@ static void WrapperLoop(workerctx_t *wp)
 			mctx_switch(&wp->mctx, &t->mctx);
 		} else {
 			/* no ready tasks */
+      WORKER_DBG("wrapper: going to check for MSG!\n");
 			LpelMailboxRecv(wp->mailbox, &msg);
       WORKER_DBG("wrapper: MSG received, handle it!\n");
 			switch(msg.type) {
@@ -494,7 +496,8 @@ workerctx_t *LpelCreateWrapperContext(int wid) {
 	if (wp == NULL) {
 		wp = (workerctx_t *) malloc(sizeof(workerctx_t));
 		/* mailbox */
-			wp->mailbox = LpelMailboxCreate();
+			wp->mailbox = LpelMailboxCreateW();
+      //WORKER_DBG("\nwrapper: context at %p, mailbox created at %p\n",wp,wp->mailbox);
 			wp->free_sd = NULL;
 			wp->free_stream = NULL;
 			wp->next = NULL;

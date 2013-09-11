@@ -327,6 +327,7 @@ void LpelTaskCheckYield(lpel_task_t *t) {
 }
 
 void LpelTaskSetRecLimit(lpel_task_t *t, int lim) {
+  printf("hrc_task.c:330 %p\n",t);
 	t->sched_info.rec_limit_factor = lim;
 }
 
