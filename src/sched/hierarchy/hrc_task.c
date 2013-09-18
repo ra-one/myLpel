@@ -43,7 +43,6 @@ static void TaskStop( lpel_task_t *t);
 lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 		void *inarg, int size)
 {
-  if (!SCCIsMaster()) return NULL;
    
 	lpel_task_t *t;
 	char *stackaddr;
@@ -96,7 +95,7 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 	t->sched_info.rec_limit_factor = -1;
 	t->sched_info.in_streams = NULL;
 	t->sched_info.out_streams = NULL;
-
+  //printf("task %p, id %d, context %p\n",t,t->uid,t->worker_context);
 	return t;
 }
 

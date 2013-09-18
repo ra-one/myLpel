@@ -31,7 +31,7 @@
 #include "lpel/monitor.h"
 #include "lpel_main.h"
 
-#define _USE_WORKER_DBG__
+//#define _USE_WORKER_DBG__
 
 #ifdef _USE_WORKER_DBG__
 #define WORKER_DBG printf
@@ -111,6 +111,7 @@ void LpelWorkerRunTask(lpel_task_t *t) {
 	if (t->worker_context != NULL) {	// wrapper
 		LpelMailboxSend(t->worker_context->mailbox, &msg);
 	}	else {
+    printf("send task to master %p\n", mastermb);
 		LpelMailboxSend(mastermb, &msg);
 	}
 }

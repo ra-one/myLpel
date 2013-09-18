@@ -342,6 +342,7 @@ void *LpelStreamRead( lpel_stream_desc_t *sd)
  */
 void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
 {
+  //printf("hrc_stream: some one wrote to stream\n");
   lpel_task_t *self = sd->task;
   int poll_wakeup = 0;
 
