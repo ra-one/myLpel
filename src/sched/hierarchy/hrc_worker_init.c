@@ -152,8 +152,7 @@ void LpelWorkersSpawn(void) {
 	int i;
 	/* master */
 	(void) pthread_create(&master->thread, NULL, MasterThread, master); 	/* spawn joinable thread */
-
-	/* workers */
+  /* workers */
 	for(i=0; i<num_workers; i++) {
 		workerctx_t *wc = workers[i];
 		(void) pthread_create(&wc->thread, NULL, WorkerThread, wc);

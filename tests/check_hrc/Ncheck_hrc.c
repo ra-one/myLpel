@@ -167,7 +167,7 @@ static void testBasic(void)
 
   unsigned long flags = 1 << 7 - 1;
   //LpelMonInit(&cfg.mon, flags);
-  SCCInit(0,2);
+  SCCInit(0,2,2);
   LpelInit(&cfg);
   LpelStart(&cfg);
   printf("\n\n*************************************\n\tcalling LpelCleanup\n*************************************\n\n");

@@ -111,7 +111,7 @@ void LpelWorkerRunTask(lpel_task_t *t) {
 	if (t->worker_context != NULL) {	// wrapper
 		LpelMailboxSend(t->worker_context->mailbox, &msg);
 	}	else {
-    printf("send task to master %p\n", mastermb);
+    //printf("send task to master %p\n", mastermb);
 		LpelMailboxSend(mastermb, &msg);
 	}
 }
@@ -327,7 +327,7 @@ static void MasterLoop(masterctx_t *master)
 		default:
 			assert(0);
 		}
-    WORKER_DBG("master->terminate %d LpelTaskqueueSize %d res %d\n\n",master->terminate, LpelTaskqueueSize(master->ready_tasks),(!(master->terminate && LpelTaskqueueSize(master->ready_tasks) == 0)));
+    WORKER_DBG("master->terminate %d LpelTaskqueueSize %d\n\n",master->terminate, LpelTaskqueueSize(master->ready_tasks));
 	} while (!(master->terminate && LpelTaskqueueSize(master->ready_tasks) == 0));
 }
 

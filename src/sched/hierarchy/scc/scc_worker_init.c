@@ -59,57 +59,59 @@ void LpelWorkersInit(int size) {
 	int i;
 	assert(0 <= size);
 	num_workers = size - 1;
-        
-        /*ini mailbox*/
-        node_ID=SCCGetNodeID();
-        LpelMailboxInit(node_ID,num_workers);
-        mailbox_t *mbox =  LpelMailboxCreate();
-        
-        if (node_ID == master_ID) {
-          /** create master */
-          master = (masterctx_t *) malloc(sizeof(masterctx_t));
-          //master->mailbox = mbox;
-          master->mailbox = allmbox[node_ID];
-          master->ready_tasks = LpelTaskqueueInit ();
-          master->num_workers = num_workers;
-          /*master do not hold context for workers*/
-          master->workers = NULL;
-          /* allocate waiting table */
-          master->waitworkers = (int *) malloc(num_workers * sizeof(int));
-          for (i=0; i<num_workers; i++) {
-            master->waitworkers[i] = 0;
-          }
-        } else{
-          /*create single worker per core*/
-          worker=(workerctx_t *) malloc(sizeof(workerctx_t));
-          worker->wid=node_ID-1;
-#ifdef USE_LOGGING
-          if (MON_CB(worker_create)) {
-            worker->mon = MON_CB(worker_create)(worker->wid);
-          } else {
-            worker->mon = NULL;
-          }
-#else
-          worker->mon = NULL;
-#endif
-          /* mailbox */
-          //worker->mailbox = mbox;
-          worker->mailbox = allmbox[node_ID];
-          worker->free_sd = NULL;
-          worker->free_stream = NULL;
-        }
-
+  
 	/* local variables used in worker operations */
 	initLocalVar(num_workers);
+  
+  /*ini mailbox*/
+  node_ID=SCCGetNodeID();
+  LpelMailboxInit(node_ID,num_workers);
+  mailbox_t *mbox =  LpelMailboxCreate();
+  
+  if (node_ID == master_ID) {
+    /** create master */
+    master = (masterctx_t *) malloc(sizeof(masterctx_t));
+    master->mailbox = mbox;
+    //printf("Master mailbox: %p\n",master->mailbox);
+    //master->mailbox = allmbox[node_ID];
+    master->ready_tasks = LpelTaskqueueInit ();
+    master->num_workers = num_workers;
+    /*master do not hold context for workers*/
+    master->workers = NULL;
+    /* allocate waiting table */
+    master->waitworkers = (int *) malloc(num_workers * sizeof(int));
+    for (i=0; i<num_workers; i++) {
+      master->waitworkers[i] = 0;
+    }
+  } else{
+    /*create single worker per core*/
+    worker=(workerctx_t *) malloc(sizeof(workerctx_t));
+    worker->wid=node_ID-1;
+#ifdef USE_LOGGING
+    if (MON_CB(worker_create)) {
+      worker->mon = MON_CB(worker_create)(worker->wid);
+    } else {
+      worker->mon = NULL;
+    }
+#else
+    worker->mon = NULL;
+#endif
+    /* mailbox */
+    worker->mailbox = mbox;
+    //worker->mailbox = allmbox[node_ID];
+    //printf("Worker mailbox: %p\n",worker->mailbox);
+    worker->free_sd = NULL;
+    worker->free_stream = NULL;
+  }
 }
 
 
 void setupMailbox(mailbox_t **mastermb, mailbox_t **workermbs) {
    int i;
-   *mastermb = allmbox[0];
+   *mastermb = allMbox[0];
    WORKER_DBG("\nmastermb %p\n",*mastermb);
    for(i=0;i<num_workers;i++){
-    workermbs[i] = allmbox[i+1];
+    workermbs[i] = allMbox[i+1];
     WORKER_DBG("workermbs[%d] %p\n",i,workermbs[i]);
    }
 }
