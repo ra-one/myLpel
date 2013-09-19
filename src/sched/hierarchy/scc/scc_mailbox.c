@@ -43,6 +43,7 @@ struct mailbox_t {
 
 //#define DCMflush(); //
 
+#define printf //
 
 
 /******************************************************************************/
@@ -171,7 +172,9 @@ void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
   int value=-1,pFlag = 1;
   while(value != 0){
 		  atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
-      if(pFlag) {pFlag=0;printf("mailbox send to %d: Inside Wait\n",mbox->mbox_ID);}
+      if(pFlag) {
+        pFlag=0;printf("mailbox send to %d: Inside Wait\n",mbox->mbox_ID);
+      }
   }
   MAILBOX_DBG("\n\nMailbox send: locked %f\n",SCCGetTime());
     
@@ -214,7 +217,9 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
     if(mbox->list_inbox != NULL){        
       	while(value != 0){
   				  atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
-            if(pFlag) {pFlag=0;printf("mailbox recv on: %d Inside Wait\n",mbox->mbox_ID);}
+            if(pFlag) {
+              pFlag=0;printf("mailbox recv on: %d Inside Wait\n",mbox->mbox_ID);
+            }
         }      	
         MAILBOX_DBG("\nMailbox recv: locked %f\n",SCCGetTime());
         go_on=true;

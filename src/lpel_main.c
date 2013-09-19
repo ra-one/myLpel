@@ -126,7 +126,6 @@ void LpelCleanup(void)
   /* cleanup machine context for main thread */
   co_thread_cleanup();
 #endif
-  SCCStop();
 }
 
 
