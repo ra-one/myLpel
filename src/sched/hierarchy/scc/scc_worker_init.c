@@ -65,7 +65,8 @@ void LpelWorkersInit(int size) {
   
   /*ini mailbox*/
   node_ID=SCCGetNodeID();
-  LpelMailboxInit(node_ID,num_workers);
+  //LpelMailboxInit(node_ID,num_workers);
+  LpelMailboxInit(SCCGetNodeRank(),num_workers);
   mailbox_t *mbox =  LpelMailboxCreate();
   
   if (node_ID == master_ID) {
@@ -86,7 +87,8 @@ void LpelWorkersInit(int size) {
   } else{
     /*create single worker per core*/
     worker=(workerctx_t *) malloc(sizeof(workerctx_t));
-    worker->wid=node_ID-1;
+    //worker->wid=node_ID-1;
+    worker->wid=SCCGetNodeRank()-1;
 #ifdef USE_LOGGING
     if (MON_CB(worker_create)) {
       worker->mon = MON_CB(worker_create)(worker->wid);

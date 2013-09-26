@@ -50,7 +50,7 @@ void *Relay(void *inarg)
     //printf("Relay %d: %s", id, item );
     if ( 0 == strcmp( item, "T\n")) {
       term = 1;
-      printf("relay id %d term forwarded\n",id);
+      //printf("relay id %d term forwarded\n",id);
       LpelStreamWrite( out, item);
     } else if(0 == strcmp( item, "D\n")){
       t = LpelTaskCreate( 0, counter, NULL, 8192);
@@ -136,7 +136,6 @@ static void *Inputter(void *arg)
   printf("Inputter START\n");
   do {
     buf = fgets( malloc( 120 * sizeof(char) ), 119, stdin  );
-    printf("inputter read %s\n", buf);
     if(0 == strcmp(buf, "D\n") || 0 == strcmp(buf, "T\n")){
       LpelStreamWrite( out, buf);
     } else {
@@ -167,7 +166,7 @@ static void testBasic(void)
 
   unsigned long flags = 1 << 7 - 1;
   //LpelMonInit(&cfg.mon, flags);
-  SCCInit(0,2,2);
+  SCCInit(0,2,2,"/shared/nil/nk.host");
   LpelInit(&cfg);
   LpelStart(&cfg);
   printf("\n\n*************************************\n\tcalling LpelCleanup\n*************************************\n\n");
@@ -184,6 +183,7 @@ static void testBasic(void)
   }
   LpelCleanup();
  	printf("\n\n*************************************\n\tcalling LpelMonCleanup\n*************************************\n\n");
+  SCCStop();
   //LpelMonCleanup();
 }
 
