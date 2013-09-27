@@ -45,7 +45,7 @@ struct mailbox_t {
 
 #define PRT_DBG //
 #define PRT_DBG1 //
-#define MAILBOX_DBG_LOCK printf
+#define MAILBOX_DBG_LOCK //
 
 
 /******************************************************************************/
