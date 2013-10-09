@@ -24,7 +24,7 @@
 
 static atomic_int stream_seq = ATOMIC_VAR_INIT(0);
 
-
+void streamPrint(lpel_stream_t *s, char *p);
 
 /**
  * Create a stream
@@ -147,10 +147,20 @@ lpel_stream_desc_t *LpelStreamOpen( lpel_stream_t *s, char mode)
 
   STREAM_DBG("task %d open stream %d, mode %c\n", ct->uid, s->uid, mode);
   LpelTaskAddStream(ct, sd, mode);
-
+  streamPrint(s,"open");
   return sd;
 }
 
+void streamPrint(lpel_stream_t *s, char *p){
+  if(s->uid != 3) return;
+  
+  printf("Stream %s: %p\n",p,s);
+  if(s->cons_sd) printf("cons_sd %p, task: %p, stream: %p\n",s->cons_sd,s->cons_sd->task,s->cons_sd->stream);
+  else printf("cons_sd is NULL\n");
+  
+  if(s->prod_sd) printf("prod_sd %p, task: %p, stream: %p\n",s->prod_sd,s->prod_sd->task,s->prod_sd->stream);
+  else printf("prod_sd is NULL\n");
+}
 /**
  * Close a stream previously opened for reading/writing
  *
@@ -159,6 +169,7 @@ lpel_stream_desc_t *LpelStreamOpen( lpel_stream_t *s, char mode)
  */
 void LpelStreamClose( lpel_stream_desc_t *sd, int destroy_s)
 {
+  streamPrint(sd->stream,"close");
   /* MONITORING CALLBACK */
 #ifdef USE_TASK_EVENT_LOGGING
   if (sd->mon && MON_CB(stream_close)) {
@@ -223,7 +234,7 @@ void LpelStreamReplace( lpel_stream_desc_t *sd, lpel_stream_t *snew)
     MON_CB(stream_replace)(sd->mon, snew->uid);
   }
 #endif
-
+  printf("\n\n\n\n\t*********************************************************************\n");
 }
 
 
@@ -268,7 +279,7 @@ void *LpelStreamRead( lpel_stream_desc_t *sd)
   void *item;
   lpel_task_t *self = sd->task;
   assert( sd->mode == 'r');
-
+  streamPrint(sd->stream,"read");
   /* MONITORING CALLBACK */
 #ifdef USE_TASK_EVENT_LOGGING
   if (sd->mon && MON_CB(stream_readprepare)) {
@@ -342,6 +353,7 @@ void *LpelStreamRead( lpel_stream_desc_t *sd)
  */
 void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
 {
+  streamPrint(sd->stream,"write");
   //printf("hrc_stream: some one wrote to stream\n");
   lpel_task_t *self = sd->task;
   int poll_wakeup = 0;

@@ -43,9 +43,9 @@ struct mailbox_t {
 
 //#define DCMflush(); //
 
-#define PRT_DBG //
+#define PRT_DBG printf
 #define PRT_DBG1 //
-#define MAILBOX_DBG_LOCK //
+#define MAILBOX_DBG_LOCK printf
 
 
 /******************************************************************************/
@@ -98,12 +98,31 @@ static int isMasterMailbox( mailbox_t *mbox)
 /* Public functions                                                           */
 /******************************************************************************/
 
-void LpelMailboxInit(int node_id_num, int num_worker){
+void LpelMailboxInit(int node_id_num, int num_worker){}
+
+mailbox_t *LpelMailboxCreate(void)
+{
+ 
+  mailbox_t *mbox = allMbox[SCCGetNodeRank()];
+
+  pthread_mutexattr_init( &attr);
+  pthread_mutexattr_setpshared( &attr, PTHREAD_PROCESS_SHARED);
+  
+  pthread_mutex_init( &mbox->lock_inbox, &attr);
+  mbox->list_free  = NULL;
+  mbox->list_inbox = NULL;
+  mbox->mbox_ID = SCCGetNodeID();
+  PRT_DBG1("mailbox: node_ID %d, mbox->id %d\n",node_ID,mbox->mbox_ID);
+  DCMflush();
+  return mbox;
+}
+
+void LpelMailboxInit1(int node_id_num, int num_worker){
   node_ID = node_id_num;
   size = num_worker+1; //+1 to include master	
 }
 
-mailbox_t *LpelMailboxCreate(void)
+mailbox_t *LpelMailboxCreate1(void)
 {
    int myId = (node_ID + num_mailboxes)%num_mailboxes;
    PRT_DBG1("mailbox: node_ID %d, myId %d\n",node_ID,myId);
@@ -184,7 +203,7 @@ void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
         pFlag=0;PRT_DBG("mailbox send to %d: Inside Wait\n",mbox->mbox_ID);
       }
   }
-  MAILBOX_DBG_LOCK("\n\nMailbox send: locked %d at %f\n",mbox->mbox_ID,SCCGetTime());
+  MAILBOX_DBG_LOCK("\nMailbox send: locked %d at %f\n",mbox->mbox_ID,SCCGetTime());
     
   /* get a free node from recepient */
   mailbox_node_t *node = GetFree( mbox);
@@ -210,7 +229,7 @@ void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
   printListInbox("Send",mbox);
   DCMflush();
   atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
-  MAILBOX_DBG_LOCK("\nMailbox send: unlocked %d at %f\n",mbox->mbox_ID,SCCGetTime());
+  MAILBOX_DBG_LOCK("Mailbox send: unlocked %d at %f\n",mbox->mbox_ID,SCCGetTime());
 }
 
 
@@ -255,7 +274,7 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
   
   DCMflush();
   atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
-  MAILBOX_DBG_LOCK("\nMailbox recv: unlocked %d at %f\n",mbox->mbox_ID,SCCGetTime());
+  MAILBOX_DBG_LOCK("Mailbox recv: unlocked %d at %f\n",mbox->mbox_ID,SCCGetTime());
 }
 
 /**

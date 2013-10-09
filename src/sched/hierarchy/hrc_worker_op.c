@@ -31,7 +31,7 @@
 #include "lpel/monitor.h"
 #include "lpel_main.h"
 
-//#define _USE_WORKER_DBG__
+#define _USE_WORKER_DBG__
 
 #ifdef _USE_WORKER_DBG__
 #define WORKER_DBG printf
@@ -49,6 +49,7 @@ static workerctx_t *getFreeWrapper();
 
 /******************************************************************************/
 static int num_workers = -1;
+static int num_wrappers = -1;
 static mailbox_t *mastermb;
 static mailbox_t **workermbs;
 
@@ -62,7 +63,7 @@ static pthread_key_t workerctx_key;
 #endif /* HAVE___THREAD */
 /******************************************************************************/
 
-void initLocalVar(int size){
+void initLocalVar(int size, int wrappers){
 #ifndef HAVE___THREAD
 	/* init key for thread specific data */
 	pthread_key_create(&workerctx_key, NULL);
@@ -71,9 +72,10 @@ void initLocalVar(int size){
   /* free wrappers */
   freewrappers = NULL;
 	PRODLOCK_INIT(&lockwrappers);
-  num_workers = size;
+  num_workers = size; //add +1 for master
+  num_wrappers = wrappers;
   /* mailboxes */
-  workermbs = (mailbox_t **) malloc(sizeof(mailbox_t *) * num_workers);
+  workermbs = (mailbox_t **) malloc(sizeof(mailbox_t *) * (num_workers+num_wrappers));
   setupMailbox(&mastermb, workermbs);
 }
 
@@ -172,6 +174,19 @@ static int servePendingReq(masterctx_t *master, lpel_task_t *t) {
 	return -1;
 }
 
+static int servePendingWrap(masterctx_t *master, lpel_task_t *t) {
+	int i;
+	for (i = 0; i < num_wrappers; i++){
+		if (master->waitwrappers[i] == 1) {
+			master->waitwrappers[i] = 0;
+			WORKER_DBG("master: send task %d to wrapper %d\n", t->uid, i);
+			sendTask(i, t);
+			return i;
+		}
+	}
+	return -1;
+}
+
 static void updatePriorityList(taskqueue_t *tq, stream_elem_t *list, char mode) {
 	double np;
 	lpel_task_t *t;
@@ -206,7 +221,7 @@ static void MasterLoop(masterctx_t *master)
 		workermsg_t msg;
 
 		LpelMailboxRecv(mastermb, &msg);
-    WORKER_DBG("\nmaster: MSG received, handle it!\n");
+    WORKER_DBG("\n\n\nmaster: MSG received, handle it! %f\n",SCCGetTime());
 		lpel_task_t *t;
 		int wid;
 		switch(msg.type) {
@@ -215,12 +230,20 @@ static void MasterLoop(masterctx_t *master)
 			t = msg.body.task;
 			assert (t->state == TASK_CREATED);
 			t->state = TASK_READY;
-			WORKER_DBG("master: got task %d\n", t->uid);
-			if (servePendingReq(master, t) < 0) {		 // no pending request
-				t->sched_info.prior = DBL_MAX; //created task does not set up input/output stream yet, set as highest priority
-				t->state = TASK_INQUEUE;
-				LpelTaskqueuePush(master->ready_tasks, t);
-			}
+      if(t->wrapper == 0){ //normal task
+        WORKER_DBG("master: got normal task %d\n", t->uid);
+        if (servePendingReq(master, t) < 0) {		 // no pending request
+          t->sched_info.prior = DBL_MAX; //created task does not set up input/output stream yet, set as highest priority
+          t->state = TASK_INQUEUE;
+          LpelTaskqueuePush(master->ready_tasks, t);
+        }
+      } else { //wrapper task
+        WORKER_DBG("master: got wrapper task %d\n", t->uid);
+        if (servePendingWrap(master, t) < 0) {		 // no pending request
+          t->state = TASK_INQUEUE;
+          LpelTaskqueuePush(master->ready_wrappers, t);
+        }
+      }
 			break;
 
 		case WORKER_MSG_RETURN:
@@ -299,25 +322,43 @@ static void MasterLoop(masterctx_t *master)
 
 
 		case WORKER_MSG_REQUEST:
-			wid = msg.body.from_worker;
-			WORKER_DBG("master: task request from worker %d\n", wid);
-			t = LpelTaskqueuePeek(master->ready_tasks);
-			if (t == NULL) {
-				master->waitworkers[wid] = 1;
-        WORKER_DBG("master: worker %d put into wait worker que\n", wid);
-			} else {
+			wid = msg.body.from_worker; 
+      printf("master: wid %d, numworkers: %d\n",wid,num_workers);
+      //if (wid < 0) wid *= -1;
+      //if(wid > (num_workers-1)){
+      if (wid < 0){
+        WORKER_DBG("master: task request from wrapper %d\n", wid);
+        wid *= -1;
+        t = LpelTaskqueuePeek(master->ready_wrappers);
+        if (t == NULL) {
+          master->waitwrappers[wid-(num_workers+1)] = 1;
+          WORKER_DBG("master: wrapper %d put into wait wrapper que\n", wid);
+        } else {
+          t->state = TASK_READY;
+          WORKER_DBG("master: task %d sent to wrapper %d\n",t->uid, wid);
+          sendTask(wid, t);
+          t = LpelTaskqueuePop(master->ready_wrappers);
+        }
+      } else {
+        WORKER_DBG("master: task request from worker %d\n", wid);
+        t = LpelTaskqueuePeek(master->ready_tasks);
+        if (t == NULL) {
+          master->waitworkers[wid] = 1;
+          WORKER_DBG("master: worker %d put into wait worker que\n", wid);
+        } else {
 
 #ifdef _USE_NEG_DEMAND_LIMIT_
-				if (t->sched_info.prior == LPEL_DBL_MIN) {		// if not schedule task if it has too low priority
-					master->waitworkers[wid] = 1;
-					break;
-				}
+          if (t->sched_info.prior == LPEL_DBL_MIN) {		// if not schedule task if it has too low priority
+            master->waitworkers[wid] = 1;
+            break;
+          }
 #endif
-				t->state = TASK_READY;
-        WORKER_DBG("master: task %d sent to worker %d\n",t->uid, wid);
-				sendTask(wid, t);
-				t = LpelTaskqueuePop(master->ready_tasks);
-			}
+          t->state = TASK_READY;
+          WORKER_DBG("master: task %d sent to worker %d\n",t->uid, wid);
+          sendTask(wid, t);
+          t = LpelTaskqueuePop(master->ready_tasks);
+        }
+      }
 			break;
 
 		case WORKER_MSG_TERMINATE:
@@ -327,7 +368,7 @@ static void MasterLoop(masterctx_t *master)
 		default:
 			assert(0);
 		}
-    WORKER_DBG("master->terminate %d LpelTaskqueueSize %d\n\n",master->terminate, LpelTaskqueueSize(master->ready_tasks));
+    WORKER_DBG("master->terminate %d, TaskqueueSize %d, WrapperqueueSize %d\n\n",master->terminate, LpelTaskqueueSize(master->ready_tasks),LpelTaskqueueSize(master->ready_wrappers));
 	} while (!(master->terminate && LpelTaskqueueSize(master->ready_tasks) == 0));
 }
 
@@ -376,7 +417,7 @@ void *MasterThread(void *arg)
  ******************************************************************************/
 
 
-static void WrapperLoop(workerctx_t *wp)
+static void WrapperLoop1(workerctx_t *wp)
 {
 	lpel_task_t *t = NULL;
 	workermsg_t msg;
@@ -434,6 +475,69 @@ static void WrapperLoop(workerctx_t *wp)
 	/* cleanup task context marked for deletion */
 }
 
+static void WrapperLoop(workerctx_t *wp)
+{
+	lpel_task_t *t = NULL;
+	workermsg_t msg;
+  
+  WORKER_DBG("wrapper: Request work for first time\n");
+  requestTask(wp);
+  goto FirstTask;
+  
+	do {
+		t = wp->current_task;
+		if (t != NULL) {
+			/* execute task */
+      WORKER_DBG("wrapper: switch to task %d\n", t->uid);
+			mctx_switch(&wp->mctx, &t->mctx);
+		} else {
+FirstTask:
+			/* no ready tasks */
+			LpelMailboxRecv(wp->mailbox, &msg);
+      WORKER_DBG("\n\n\nwrapper: MSG received, handle it! %f\n",SCCGetTime());
+			switch(msg.type) {
+			case WORKER_MSG_ASSIGN:
+				t = msg.body.task;
+				WORKER_DBG("wrapper: got task %d\n", t->uid);
+				//assert(t->state == TASK_CREATED);
+				t->state = TASK_READY;
+				wp->current_task = t;
+        t->worker_context = wp;
+#ifdef USE_LOGGING
+				if (t->mon) {
+					if (MON_CB(worker_create_wrapper)) {
+						wp->mon = MON_CB(worker_create_wrapper)(t->mon);
+					} else {
+						wp->mon = NULL;
+					}
+				}
+				if (t->mon && MON_CB(task_assign)) {
+					MON_CB(task_assign)(t->mon, wp->mon);
+				}
+#endif
+				break;
+
+			case WORKER_MSG_WAKEUP:
+				t = msg.body.task;
+				WORKER_DBG("wrapper: unblock task %d\n", t->uid);
+				assert (t->state == TASK_BLOCKED);
+				t->state = TASK_READY;
+				wp->current_task = t;
+#ifdef USE_LOGGING
+				if (t->mon && MON_CB(task_assign)) {
+					MON_CB(task_assign)(t->mon, wp->mon);
+				}
+#endif
+				break;
+			default:
+				assert(0);
+				break;
+			}
+		}
+	} while (!wp->terminate);
+	LpelTaskDestroy(wp->current_task);
+	/* cleanup task context marked for deletion */
+}
 
 static void addFreeWrapper(workerctx_t *wp) {
 	assert (!LpelMailboxHasIncoming(wp->mailbox) && wp->terminate);
@@ -458,8 +562,6 @@ static workerctx_t *getFreeWrapper(){
 	PRODLOCK_UNLOCK(&lockwrappers);
 	return w;
 }
-
-
 
 
 void *WrapperThread(void *arg)
@@ -513,7 +615,6 @@ workerctx_t *LpelCreateWrapperContext(int wid) {
 }
 
 
-
 /** return the total number of workers, including master */
 int LpelWorkerCount(void)
 {
@@ -544,18 +645,18 @@ static void WorkerLoop(workerctx_t *wc)
 	WORKER_DBG("start worker %d\n", wc->wid);
 
   lpel_task_t *t = NULL;
-  WORKER_DBG("Request work for first time\n");
+  WORKER_DBG("worker: Request work for first time\n");
   requestTask(wc);		// ask for the first time
 
   workermsg_t msg;
   do {
   	  LpelMailboxRecv(wc->mailbox, &msg);
-      WORKER_DBG("\nworker: MSG received, handle it!\n");
+      WORKER_DBG("\n\n\nworker: MSG received, handle it! %f\n",SCCGetTime());
       
   	  switch(msg.type) {
   	  case WORKER_MSG_ASSIGN:
   	  	t = msg.body.task;
-  	  	WORKER_DBG("worker %d: got task %d\n", wc->wid, t->uid);
+  	  	WORKER_DBG("worker %d: got task %d, isWrapper: %d\n", wc->wid, t->uid,t->wrapper);
         assert(t->state == TASK_READY);
   	  	t->worker_context = wc;
   	  	wc->current_task = t;

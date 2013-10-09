@@ -61,12 +61,21 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 	stackaddr = (char *) t + offset;
 	t->size = size;
 
-
-	if (map != LPEL_MAP_MASTER )	/** others wrapper or source/sink */
+  /*
+	if (map != LPEL_MAP_MASTER )	// others wrapper or source/sink
 		t->worker_context = LpelCreateWrapperContext(map);
-	else
+	else   
 		t->worker_context = NULL;
-
+  */
+  
+  //all tasks should be created and sent to master
+  if (map == LPEL_MAP_MASTER )	
+		t->wrapper = 0;  //normal task
+  else // others wrapper or source/sink
+    t->wrapper = 1;
+    
+  t->worker_context = NULL; 
+  
 	t->uid = atomic_fetch_add( &taskseq, 1);  /* obtain a unique task id */
 	t->func = func;
 	t->inarg = inarg;
@@ -472,7 +481,8 @@ int LpelTaskGetWorkerId(lpel_task_t *t) {
 void LpelTaskCheckMigrate(void) {}
 
 int LpelTaskIsWrapper(lpel_task_t *t) {
-	return (t->worker_context->wid == -1);
+	//return (t->worker_context->wid == -1);
+  return (t->wrapper);
 }
 
 void LpelTaskSetNegLim(int lim) {

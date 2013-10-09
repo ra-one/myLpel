@@ -40,9 +40,12 @@ typedef struct masterctx_t {
   //mon_worker_t *mon; // FIXME
   mailbox_t    *mailbox;
   taskqueue_t  *ready_tasks;
+  taskqueue_t  *ready_wrappers;
   char          padding[64];
   int *waitworkers;
   int num_workers;
+  int *waitwrappers;
+  int num_wrappers;
   workerctx_t **workers;
 } masterctx_t;
 
@@ -82,7 +85,7 @@ void *MasterThread(void *arg);
 void *WrapperThread(void *arg);
 
 /******************* INI local vars *****************************/
-void initLocalVar(int size);
+void initLocalVar(int size, int wrappers);
 void cleanupLocalVar();
 void setupMailbox(mailbox_t **mastermb, mailbox_t **workermbs);
 

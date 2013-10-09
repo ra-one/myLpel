@@ -158,15 +158,15 @@ static void testBasic(void)
   lpel_task_t *intask, *outtask;
   mon_task_t *mt;
 
-  cfg.num_workers = 2; //number of cores in SCC
-  cfg.proc_workers = 2;
+  cfg.num_workers = 3; //number of cores in SCC to work as worker including master
+  cfg.proc_workers = 3;
   cfg.proc_others = 0;
   cfg.flags = 0;
   cfg.type = HRC_LPEL;
 
   unsigned long flags = 1 << 7 - 1;
   //LpelMonInit(&cfg.mon, flags);
-  SCCInit(0,2,2,"/shared/nil/nk.host");
+  SCCInit(0,3,2,"/shared/nil/nk.host");
   LpelInit(&cfg);
   LpelStart(&cfg);
   printf("\n\n*************************************\n\tcalling LpelCleanup\n*************************************\n\n");
@@ -174,6 +174,7 @@ static void testBasic(void)
     in = LpelStreamCreate(0);
     out = PipeElement(in, 2);
     outtask = LpelTaskCreate( -1, Outputter, out, 8192);
+    //outtask = LpelTaskCreate( 0, Outputter, out, 8192);
     LpelTaskStart(outtask);
     printf("\n\n*************************************\nOut Task started\n*************************************\n");
 
