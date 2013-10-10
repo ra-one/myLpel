@@ -33,7 +33,7 @@
 #include "scc.h"
 
 
-#define _USE_WORKER_DBG__
+//#define _USE_WORKER_DBG__
 
 #ifdef _USE_WORKER_DBG__
 #define WORKER_DBG printf
@@ -47,8 +47,7 @@ static int num_workers = -1;
 static int num_wrappers = -1;
 static masterctx_t *master;
 static workerctx_t *worker;
-static int node_ID;
-static void *local;
+
 /**
  * Initialise worker globally
  *
@@ -59,24 +58,19 @@ void LpelWorkersInit(int size) {
 
 	int i,rank;
 	assert(0 <= size);
-	num_workers = size - 1; //minus the master
-  printf("workerInit: size: %d, num_work %d\n\n\n",size,num_workers);
+	 
 	/* local variables used in worker operations */
+  num_workers = size - 1; //minus the master
   num_wrappers = SCCGetNumWrappers();
 	initLocalVar(num_workers,num_wrappers);
   
   /*ini mailbox*/
-  node_ID=SCCGetNodeID();
-  //LpelMailboxInit(node_ID,num_workers);
-  LpelMailboxInit(SCCGetNodeRank(),num_workers);
   mailbox_t *mbox =  LpelMailboxCreate();
   
-  if (node_ID == master_ID) {
+  if (SCCIsMaster()) {
     /** create master */
     master = (masterctx_t *) malloc(sizeof(masterctx_t));
     master->mailbox = mbox;
-    //printf("Master mailbox: %p\n",master->mailbox);
-    //master->mailbox = allmbox[node_ID];
     master->ready_tasks = LpelTaskqueueInit ();
     master->ready_wrappers = LpelTaskqueueInit();
     master->num_workers = num_workers;
@@ -95,7 +89,6 @@ void LpelWorkersInit(int size) {
   } else{
     /*create single worker per core*/
     worker=(workerctx_t *) malloc(sizeof(workerctx_t));
-    //worker->wid=node_ID-1;
     rank = SCCGetNodeRank();
     if ( rank > num_workers){
       worker->wid=(rank-(rank+rank))+1; //convert rank to negative 
@@ -113,11 +106,9 @@ void LpelWorkersInit(int size) {
 #endif
     /* mailbox */
     worker->mailbox = mbox;
-    //worker->mailbox = allmbox[node_ID];
-    //printf("Worker mailbox: %p\n",worker->mailbox);
     worker->free_sd = NULL;
     worker->free_stream = NULL;
-    printf("worker init: node_location %d, rank %d, wid %d\n",SCCGetNodeID(), SCCGetNodeRank(),worker->wid);
+    WORKER_DBG("workerInit: node physical location %d, rank %d, wid %d\n",SCCGetNodeID(), SCCGetNodeRank(),worker->wid);
   }
 }
 
@@ -138,7 +129,7 @@ void setupMailbox(mailbox_t **mastermb, mailbox_t **workermbs) {
 void LpelWorkersCleanup(void) {
 	int i;
 
-        if (node_ID == master_ID) {
+        if (SCCIsMaster()) {
           /* wait for the master to finish */
           (void) pthread_join(master->thread, NULL);
           /* clean up master's mailbox */
@@ -170,7 +161,7 @@ void LpelWorkersCleanup(void) {
  * Spawn master and workers
  */
 void LpelWorkersSpawn(void) {
-	if (node_ID == master_ID) {
+	if (SCCIsMaster()) {
     /* master spawn joinable thread*/
     (void) pthread_create(&master->thread, NULL, MasterThread, master);
   } else if(SCCGetNodeRank() > num_workers) { // +1 for master
@@ -186,7 +177,7 @@ void LpelWorkersSpawn(void) {
 /*
  * Terminate master and workers
  */
-void LpelWorkersTerminate(void) {
+void LpelWorkersTerminate1(void) {
 	workermsg_t msg;
 	msg.type = WORKER_MSG_TERMINATE;
 	LpelMailboxSend(master->mailbox, &msg);

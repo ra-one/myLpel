@@ -24,7 +24,18 @@
 
 static atomic_int stream_seq = ATOMIC_VAR_INIT(0);
 
-void streamPrint(lpel_stream_t *s, char *p);
+// print stream info for debug
+void streamPrint(lpel_stream_t *s, char *p){}
+void streamPrint1(lpel_stream_t *s, char *p){
+  if(s->uid != 3) return;
+  
+  printf("Stream %s: %p\n",p,s);
+  if(s->cons_sd) printf("cons_sd %p, task: %p, stream: %p\n",s->cons_sd,s->cons_sd->task,s->cons_sd->stream);
+  else printf("cons_sd is NULL\n");
+  
+  if(s->prod_sd) printf("prod_sd %p, task: %p, stream: %p\n",s->prod_sd,s->prod_sd->task,s->prod_sd->stream);
+  else printf("prod_sd is NULL\n");
+}
 
 /**
  * Create a stream
@@ -151,16 +162,6 @@ lpel_stream_desc_t *LpelStreamOpen( lpel_stream_t *s, char mode)
   return sd;
 }
 
-void streamPrint(lpel_stream_t *s, char *p){
-  if(s->uid != 3) return;
-  
-  printf("Stream %s: %p\n",p,s);
-  if(s->cons_sd) printf("cons_sd %p, task: %p, stream: %p\n",s->cons_sd,s->cons_sd->task,s->cons_sd->stream);
-  else printf("cons_sd is NULL\n");
-  
-  if(s->prod_sd) printf("prod_sd %p, task: %p, stream: %p\n",s->prod_sd,s->prod_sd->task,s->prod_sd->stream);
-  else printf("prod_sd is NULL\n");
-}
 /**
  * Close a stream previously opened for reading/writing
  *

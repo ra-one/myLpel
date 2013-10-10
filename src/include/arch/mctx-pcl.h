@@ -8,6 +8,8 @@
 #include "scc.h"
 #endif /*USE_SCC*/
 
+#define DCMflush(); //
+
 typedef coroutine_t mctx_t;
 
 

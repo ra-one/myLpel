@@ -31,7 +31,7 @@
 #include "lpel/monitor.h"
 #include "lpel_main.h"
 
-#define _USE_WORKER_DBG__
+//#define _USE_WORKER_DBG__
 
 #ifdef _USE_WORKER_DBG__
 #define WORKER_DBG printf
@@ -323,9 +323,6 @@ static void MasterLoop(masterctx_t *master)
 
 		case WORKER_MSG_REQUEST:
 			wid = msg.body.from_worker; 
-      printf("master: wid %d, numworkers: %d\n",wid,num_workers);
-      //if (wid < 0) wid *= -1;
-      //if(wid > (num_workers-1)){
       if (wid < 0){
         WORKER_DBG("master: task request from wrapper %d\n", wid);
         wid *= -1;
@@ -411,6 +408,14 @@ void *MasterThread(void *arg)
   return NULL;
 }
 
+/*
+ * Terminate master and workers
+ */
+void LpelWorkersTerminate(void) {
+	workermsg_t msg;
+	msg.type = WORKER_MSG_TERMINATE;
+	LpelMailboxSend(mastermb, &msg);
+}
 
 /*******************************************************************************
  * WRAPPER FUNCTION
@@ -580,11 +585,11 @@ void *WrapperThread(void *arg)
 	assert(0 == co_thread_init());
 	wp->mctx = co_current();
 #endif
-
+  wp->terminate = 0;
 	LpelThreadAssign(wp->wid);
 	WrapperLoop(wp);
 
-	addFreeWrapper(wp);
+	//addFreeWrapper(wp);
 
 #ifdef USE_MCTX_PCL
 	co_thread_cleanup();
