@@ -34,7 +34,17 @@ struct mailbox_t {
 };
 
 #define MAILBOX_DBG	//
-#define MAILBOX_DBG_LOCK printf
+
+//#define _USE_MBX_DBG__
+
+#ifdef _USE_MBX_DBG__
+#define MAILBOX_DBG_LOCK //
+#define PFLAG 1
+#else
+#define PFLAG 0
+#define MAILBOX_DBG_LOCK //
+#endif
+
 
 #define DCMflush(); //
 
@@ -143,12 +153,14 @@ void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
   if(USE_TSR){
     lock(mbox->mbox_ID);
   } else {
-    int value=-1,pFlag = 1;
+// Labels can only be followed by statements, and declarations do not count as statements in C
+// http://stackoverflow.com/questions/18496282
+whileStartSend: ;
+    int value=-1,pFlag = PFLAG,counter=0;
     while(value != 0){
       atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
-      if(pFlag) {
-        pFlag=0;MAILBOX_DBG_LOCK("mailbox send to %d: Inside Wait\n",mbox->mbox_ID);
-      }
+      if((counter++) == 10) goto whileStartSend;
+      if(pFlag) { pFlag=0;MAILBOX_DBG_LOCK("mailbox send to %d: Inside Wait\n",mbox->mbox_ID); }
     }
   }
   
@@ -190,7 +202,6 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
 {
   mailbox_node_t *node;
   bool message=false,go_on=false;
-  int value=-1,pFlag = 1;
   
   while(go_on==false){
     DCMflush();
@@ -198,11 +209,12 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
       if(USE_TSR){
         lock(mbox->mbox_ID);
       } else {
+whileStartRecv: ;
+        int value=-1,pFlag = 1,counter=0;
       	while(value != 0){
   		    atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
-          if(pFlag) {
-            pFlag=0;MAILBOX_DBG_LOCK("mailbox recv on: %d Inside Wait\n",mbox->mbox_ID);
-          }
+          if((counter++) == 10) goto whileStartRecv;
+          if(pFlag) { pFlag=0;MAILBOX_DBG_LOCK("mailbox recv on: %d Inside Wait\n",mbox->mbox_ID); }
         }
       }      	
       MAILBOX_DBG_LOCK("\nMailbox recv: locked %d at %f\n",mbox->mbox_ID,SCCGetTime());
