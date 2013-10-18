@@ -98,7 +98,7 @@ int LpelStart(lpel_config_t *cfg)
   LpelWorkersInit( _lpel_global_config.num_workers);
 
   LpelWorkersSpawn();
-
+   
   return 0;
 }
 

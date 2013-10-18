@@ -32,7 +32,7 @@
 #include "lpel_main.h"
 #include "scc.h"
 
-
+void LpelStartMeasurement(void);
 //#define _USE_WORKER_DBG__
 
 #ifdef _USE_WORKER_DBG__
@@ -164,6 +164,7 @@ void LpelWorkersSpawn(void) {
 	if (SCCIsMaster()) {
     /* master spawn joinable thread*/
     (void) pthread_create(&master->thread, NULL, MasterThread, master);
+    //LpelStartMeasurement();
   } else if(SCCGetNodeRank() > num_workers) { // +1 for master
     /* wrappers */
     (void) pthread_create(&worker->thread, NULL, WrapperThread, worker);
@@ -173,7 +174,23 @@ void LpelWorkersSpawn(void) {
 	}
 }
 
+void *Measurement(void *arg){
+  int i=0,j=0;
+  do{
+     if(i++ > 50000) { j++; i=0; printf("%d\n",j); }
+  }while(!MESSTOP);
+  printf("i: %d, j: %d\n",i,j);
+  return NULL;
+}
 
+void LpelStartMeasurement(void){
+  lpel_task_t *measurementtask;
+  measurementtask = LpelTaskCreate( -1, Measurement, NULL, 8192);
+  //int *id = (int*) measurementtask + 2; // set task id
+  //*id = 99999;
+  LpelTaskStart(measurementtask);
+}
+  
 /*
  * Terminate master and workers
  */

@@ -33,23 +33,25 @@ struct mailbox_t {
   int                 mbox_ID;
 };
 
-#define MAILBOX_DBG	//
+
 
 #define _USE_MBX_DBG__
 
 #ifdef _USE_MBX_DBG__
 #define MAILBOX_DBG_LOCK printf
 #define PFLAG 1
+#define MAILBOX_DBG	//
 #else
 #define PFLAG 0
 #define MAILBOX_DBG_LOCK //
+#define MAILBOX_DBG	//
 #endif
 
 
 #define DCMflush(); //
 
 // 0 false, 1 true
-#define USE_TSR 0 
+#define USE_TSR 1 
 /******************************************************************************/
 /* Free node pool management functions                                        */
 /******************************************************************************/
@@ -151,21 +153,24 @@ void printListInbox1(char* c, mailbox_t *mbox){
 void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
 {
   if(USE_TSR){
-    lock(mbox->mbox_ID);
+    lock((mbox->mbox_ID)+20);
   } else {
 // Labels can only be followed by statements, and declarations do not count as statements in C
 // http://stackoverflow.com/questions/18496282
 whileStartSend: ;
-    int value=-1,pFlag = 1,counter=0;
+    int value=-1,pFlag = 1,counter=0,dbgValue=-1;
     while(value != 0){
-      //if((counter++) == 10) goto whileStartSend;
       atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
-      if((counter++) == 10 && value != 0) goto whileStartSend;
-      if(pFlag) { pFlag=0;MAILBOX_DBG_LOCK("mailbox send to %d: Inside Wait\n",mbox->mbox_ID); }
+      //if((counter++) == 50 && value != 0) goto whileStartSend;
+      if(pFlag) { 
+        pFlag=0;
+        atomic_readR(&atomic_inc_regs[mbox->mbox_ID],&dbgValue);
+        MAILBOX_DBG_LOCK("\nmailbox send to %d: Inside Wait, reading %d\n",mbox->mbox_ID,dbgValue); 
+      }
     }
   }
   
-  MAILBOX_DBG_LOCK("\nMailbox send: locked %d at %f\n",mbox->mbox_ID,SCCGetTime());
+  MAILBOX_DBG_LOCK("Mailbox send: locked %d at %f\n",mbox->mbox_ID,SCCGetTime());
     
   /* get a free node from recepient */
   mailbox_node_t *node = GetFree( mbox);
@@ -191,11 +196,11 @@ whileStartSend: ;
   printListInbox("Send",mbox);
   DCMflush();
   if(USE_TSR){
-    unlock(mbox->mbox_ID);
+    unlock((mbox->mbox_ID)+20);
   } else {
     atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
   }
-  MAILBOX_DBG_LOCK("Mailbox send: unlocked %d at %f\n",mbox->mbox_ID,SCCGetTime());
+  MAILBOX_DBG_LOCK("Mailbox send: unlocked %d at %f\n\n",mbox->mbox_ID,SCCGetTime());
 }
 
 
@@ -208,18 +213,21 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
     DCMflush();
     if(mbox->list_inbox != NULL){
       if(USE_TSR){
-        lock(mbox->mbox_ID);
+        lock((mbox->mbox_ID)+20);
       } else {
 whileStartRecv: ;
-        int value=-1,pFlag = 1,counter=0;
+        int value=-1,pFlag = 1,counter=0,dbgValue=-1;;
       	while(value != 0){
-          //if((counter++) == 10) goto whileStartRecv;
   		    atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
-          if((counter++) == 10 && value != 0) goto whileStartRecv;
-          if(pFlag) { pFlag=0;MAILBOX_DBG_LOCK("mailbox recv on: %d Inside Wait\n",mbox->mbox_ID); }
+          //if((counter++) == 50 && value != 0) goto whileStartRecv;
+          if(pFlag) { 
+            pFlag=0;
+            atomic_readR(&atomic_inc_regs[mbox->mbox_ID],&dbgValue);
+            MAILBOX_DBG_LOCK("\nmailbox recv on: %d Inside Wait, reading %d\n",mbox->mbox_ID,dbgValue); 
+          }
         }
       }      	
-      MAILBOX_DBG_LOCK("\nMailbox recv: locked %d at %f\n",mbox->mbox_ID,SCCGetTime());
+      MAILBOX_DBG_LOCK("Mailbox recv: locked %d at %f\n",mbox->mbox_ID,SCCGetTime());
       go_on=true;
     }//else{printf("\nMailbox %d %p inbox is null,mbox->list_inbox %p\n",mbox->mbox_ID,mbox,mbox->list_inbox);sleep(1);}
   }
@@ -245,11 +253,11 @@ whileStartRecv: ;
   
   DCMflush();
   if(USE_TSR){
-    unlock(mbox->mbox_ID);
+    unlock((mbox->mbox_ID)+20);
   } else {
     atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
   }
-  MAILBOX_DBG_LOCK("Mailbox recv: unlocked %d at %f\n",mbox->mbox_ID,SCCGetTime());
+  MAILBOX_DBG_LOCK("Mailbox recv: unlocked %d at %f\n\n",mbox->mbox_ID,SCCGetTime());
 }
 
 /**

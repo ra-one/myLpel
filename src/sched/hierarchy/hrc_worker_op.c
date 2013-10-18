@@ -400,7 +400,9 @@ void *MasterThread(void *arg)
   workermsg_t msg;
   msg.type = WORKER_MSG_TERMINATE;
   LpelWorkerBroadcast(&msg);
-
+  WORKER_DBG("master:\n\n********* MESSTOP = %d *********\n\n",MESSTOP);
+  MESSTOP = 1; // stop measurement task
+  WORKER_DBG("master:\n\n********* MESSTOP = %d *********\n\n",MESSTOP);
 #ifdef USE_MCTX_PCL
   co_thread_cleanup();
 #endif
