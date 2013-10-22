@@ -9,6 +9,7 @@
 #include <lpel_common.h>
 
 #include "lpel_main.h"
+#include "scc_lpel.h"
 
 
 /*
@@ -116,7 +117,6 @@ lpel_stream_iter_t *LpelStreamIterCreate( lpel_streamset_t *set)
 {
   lpel_stream_iter_t *iter =
     (lpel_stream_iter_t *) malloc( sizeof( lpel_stream_iter_t));
-
   if (set) {
     iter->prev = *set;
     iter->set = set;

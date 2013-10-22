@@ -35,7 +35,7 @@ struct mailbox_t {
 
 
 
-#define _USE_MBX_DBG__
+//#define _USE_MBX_DBG__
 
 #ifdef _USE_MBX_DBG__
 #define MAILBOX_DBG_LOCK printf
@@ -51,7 +51,7 @@ struct mailbox_t {
 #define DCMflush(); //
 
 // 0 false, 1 true
-#define USE_TSR 1 
+#define USE_TSR 0 
 /******************************************************************************/
 /* Free node pool management functions                                        */
 /******************************************************************************/
@@ -155,17 +155,13 @@ void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
   if(USE_TSR){
     lock((mbox->mbox_ID)+20);
   } else {
-// Labels can only be followed by statements, and declarations do not count as statements in C
-// http://stackoverflow.com/questions/18496282
-whileStartSend: ;
-    int value=-1,pFlag = 1,counter=0,dbgValue=-1;
+    int value=-1,pFlag=1,dbgValue = -1;
     while(value != 0){
       atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
-      //if((counter++) == 50 && value != 0) goto whileStartSend;
-      if(pFlag) { 
+      if(pFlag && value != 0) {
         pFlag=0;
         atomic_readR(&atomic_inc_regs[mbox->mbox_ID],&dbgValue);
-        MAILBOX_DBG_LOCK("\nmailbox send to %d: Inside Wait, reading %d\n",mbox->mbox_ID,dbgValue); 
+        MAILBOX_DBG_LOCK("\nmailbox send to %d: Inside Wait, value: %d, reading %d\n",mbox->mbox_ID,value,dbgValue); 
       }
     }
   }
@@ -215,15 +211,13 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
       if(USE_TSR){
         lock((mbox->mbox_ID)+20);
       } else {
-whileStartRecv: ;
-        int value=-1,pFlag = 1,counter=0,dbgValue=-1;;
+        int value=-1,pFlag=1,dbgValue = -1;
       	while(value != 0){
   		    atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
-          //if((counter++) == 50 && value != 0) goto whileStartRecv;
-          if(pFlag) { 
+          if(pFlag && value != 0) {
             pFlag=0;
             atomic_readR(&atomic_inc_regs[mbox->mbox_ID],&dbgValue);
-            MAILBOX_DBG_LOCK("\nmailbox recv on: %d Inside Wait, reading %d\n",mbox->mbox_ID,dbgValue); 
+            MAILBOX_DBG_LOCK("\nmailbox recv on %d: Inside Wait, value: %d, reading %d\n",mbox->mbox_ID,value,dbgValue); 
           }
         }
       }      	
