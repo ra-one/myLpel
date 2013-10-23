@@ -95,7 +95,7 @@ int LpelStart(lpel_config_t *cfg)
   LpelHwLocStart(cfg);
 #endif /*USE_SCC*/
   /* initialise workers */
-  LpelWorkersInit( _lpel_global_config.num_workers);
+  LpelWorkersInit( cfg);
 
   LpelWorkersSpawn();
    

@@ -2,6 +2,7 @@
 #define _HRC_WORKER_H_
 
 #include <pthread.h>
+#include <time.h>
 #include <hrc_lpel.h>
 #include "lpel_main.h"
 #include "arch/mctx.h"
@@ -17,6 +18,7 @@
 #define  WORKER_MSG_REQUEST			4		// worker request task
 #define  WORKER_MSG_RETURN			5		// worker return tasks
 
+typedef struct timeval timeval_t;
 
 typedef struct workerctx_t {
   int wid;
@@ -43,10 +45,20 @@ typedef struct masterctx_t {
   taskqueue_t  *ready_wrappers;
   char          padding[64];
   int *waitworkers;
+  int first_wait; // index to update wait workers
+  int next_wait;  // index to update wait workers
   int num_workers;
   int *waitwrappers;
   int num_wrappers;
   workerctx_t **workers;
+  /* info for waiting time monitoring */
+  int window_size;
+  int wait_threshold;
+  timeval_t *start_worker_wait; // array of start of waiting time for worker, index is wid
+  double *window_wait;
+  timeval_t *window_start;
+  int next_window_index;  // 
+  unsigned int count_wait;
 } masterctx_t;
 
 

@@ -125,6 +125,10 @@ typedef struct {
   int flags;
   lpel_monitoring_cb_t mon;
   lpel_backend_type type;
+  /* wait monitoring parameter */
+  int wait_window_size;
+  int wait_threshold;
+
 } lpel_config_t;
 
 

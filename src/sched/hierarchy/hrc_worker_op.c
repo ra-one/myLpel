@@ -16,6 +16,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <float.h>
+#include <sys/time.h>
 
 #include <pthread.h>
 #include "arch/mctx.h"
@@ -160,6 +161,91 @@ static void sendWakeup(mailbox_t *mb, lpel_task_t *t)
 /*******************************************************************************
  * MASTER FUNCTION
  ******************************************************************************/
+static double time_diff(timeval_t *x , timeval_t *y) // in micro second
+{
+  double x_ms , y_ms , diff;
+
+  x_ms = (double)x->tv_sec*1000000 + (double)x->tv_usec;
+  y_ms = (double)y->tv_sec*1000000 + (double)y->tv_usec;
+
+  diff = (double)y_ms - (double)x_ms;
+
+  return diff;
+}
+
+
+/* evaluate waiting time of all workers, consider decrease cpu frequency */
+static void evaluateWaiting(masterctx_t *master, timeval_t *cur) {
+  // if wait_threshold is < 0 then do not change freq
+  if (master->wait_threshold < 0) return; 
+  
+  master->count_wait++;
+  
+  // skip when waiting window is not full
+  if (master->count_wait < master->window_size) return;
+
+  int i;
+  double wait = 0.0;
+  for (i = 0; i < master->window_size; i++) {
+    wait = wait + master->window_wait[i];
+  }
+  int first = master->next_window_index; // when the window is full, the next index in the window is the first waiting time, i.e. the one will be overwritten next
+  double observe_time = time_diff(&master->window_start[first], cur);
+  double prop_wait = wait*100.0/(master->num_workers * observe_time);
+  //printf("prop wait %f, %f\n", prop_wait, observe_time);
+  if (prop_wait > master->wait_threshold) {
+    master->count_wait = 0;
+    printf("reduce frequency\n");
+  }
+}
+
+/* add a worker to the waiting list */
+static void addWait(masterctx_t *master, int worker) {
+  if (master->first_wait == master->next_wait) { //array of waiting worker must be either empty or full
+    assert(master->waitworkers[master->first_wait] == -1); // can not be full
+  }
+  master->waitworkers[master->next_wait] = worker;
+  master->next_wait = (master->next_wait + 1) % master->num_workers;
+  // get time when it start waiting
+  gettimeofday(&master->start_worker_wait[worker], NULL);
+}
+
+/* get the first waiting worker, if non, return -1 */
+static int getWait(masterctx_t *master) {
+  if (master->first_wait == master->next_wait) { //array of waiting worker must be either empty or full
+     // empty
+    if (master->waitworkers[master->first_wait] == -1) return -1;
+  }
+
+  int worker = master->waitworkers[master->first_wait];
+  master->waitworkers[master->first_wait] = -1;
+  master->first_wait = (master->first_wait + 1) % master->num_workers;
+
+  // get time when it stop waiting
+  timeval_t cur_time;
+  gettimeofday(&cur_time, NULL);
+  double wait = time_diff(&master->start_worker_wait[worker], &cur_time);
+  master->window_wait[master->next_window_index] = wait;
+  master->window_start[master->next_window_index] = master->start_worker_wait[worker]; /* only update when accounting new waiting period */
+  master->next_window_index = (master->next_window_index + 1) % master->window_size;
+  //printf("new wait: time %f, start %f, %f\n", wait, master->start_worker_wait[worker].tv_sec, master->start_worker_wait[worker].tv_usec);
+  evaluateWaiting(master, &cur_time);
+
+  return worker;
+}
+
+static int servePendingReq(masterctx_t *master, lpel_task_t *t) {
+  int w;
+  //t->sched_info.prior = LpelTaskCalPriority(t);
+  w = getWait(master);
+  if (w != -1) {
+    WORKER_DBG("master: send task %d to waiting worker %d\n", t->uid, w);
+    sendTask(w, t);
+  }
+  return w;
+}
+
+/*
 static int servePendingReq(masterctx_t *master, lpel_task_t *t) {
 	int i;
 	t->sched_info.prior = LpelTaskCalPriority(t);
@@ -173,7 +259,7 @@ static int servePendingReq(masterctx_t *master, lpel_task_t *t) {
 	}
 	return -1;
 }
-
+*/
 static int servePendingWrap(masterctx_t *master, lpel_task_t *t) {
 	int i;
 	for (i = 0; i < num_wrappers; i++){
@@ -340,13 +426,15 @@ static void MasterLoop(masterctx_t *master)
         WORKER_DBG("master: task request from worker %d\n", wid);
         t = LpelTaskqueuePeek(master->ready_tasks);
         if (t == NULL) {
-          master->waitworkers[wid] = 1;
+          //master->waitworkers[wid] = 1;
+          addWait(master, wid);
           WORKER_DBG("master: worker %d put into wait worker que\n", wid);
         } else {
 
 #ifdef _USE_NEG_DEMAND_LIMIT_
           if (t->sched_info.prior == LPEL_DBL_MIN) {		// if not schedule task if it has too low priority
-            master->waitworkers[wid] = 1;
+            //master->waitworkers[wid] = 1;
+            addWait(master, wid);
             break;
           }
 #endif

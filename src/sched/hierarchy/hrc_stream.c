@@ -22,10 +22,15 @@
 #define STREAM_DBG	//
 #endif
 
+#define STRM_LOCK_DBG(x) fprintf(stderr,x)
+
 static atomic_int stream_seq = ATOMIC_VAR_INIT(0);
 
 // print stream info for debug
-void streamPrint(lpel_stream_t *s, char *p){}
+void streamPrint(lpel_stream_t *s, char *p){
+  printf("stream id: %d %p, prodlock addr: %p, from %s\n",s->uid,s,&s->prod_lock,p);
+}
+void streamPrint2(lpel_stream_t *s, char *p){}
 void streamPrint1(lpel_stream_t *s, char *p){
   if(s->uid != 3) return;
   
@@ -60,6 +65,7 @@ lpel_stream_t *LpelStreamCreate(int size)
 
   s->uid = atomic_fetch_add( &stream_seq, 1);
   PRODLOCK_INIT( &s->prod_lock );
+  streamPrint(s,"init");
   atomic_init( &s->n_sem, 0);
   atomic_init( &s->e_sem, size);
   s->is_poll = 0;
@@ -84,6 +90,7 @@ lpel_stream_t *LpelStreamCreate(int size)
  */
 void LpelStreamDestroy( lpel_stream_t *s)
 {
+  streamPrint(s,"destroy");
   PRODLOCK_DESTROY( &s->prod_lock);
   atomic_destroy( &s->n_sem);
   atomic_destroy( &s->e_sem);
@@ -158,7 +165,7 @@ lpel_stream_desc_t *LpelStreamOpen( lpel_stream_t *s, char mode)
 
   STREAM_DBG("task %d open stream %d, mode %c\n", ct->uid, s->uid, mode);
   LpelTaskAddStream(ct, sd, mode);
-  streamPrint(s,"open");
+  streamPrint2(s,"open");
   return sd;
 }
 
@@ -170,7 +177,7 @@ lpel_stream_desc_t *LpelStreamOpen( lpel_stream_t *s, char mode)
  */
 void LpelStreamClose( lpel_stream_desc_t *sd, int destroy_s)
 {
-  streamPrint(sd->stream,"close");
+  streamPrint2(sd->stream,"close");
   /* MONITORING CALLBACK */
 #ifdef USE_TASK_EVENT_LOGGING
   if (sd->mon && MON_CB(stream_close)) {
@@ -280,7 +287,7 @@ void *LpelStreamRead( lpel_stream_desc_t *sd)
   void *item;
   lpel_task_t *self = sd->task;
   assert( sd->mode == 'r');
-  streamPrint(sd->stream,"read");
+  streamPrint2(sd->stream,"read");
   /* MONITORING CALLBACK */
 #ifdef USE_TASK_EVENT_LOGGING
   if (sd->mon && MON_CB(stream_readprepare)) {
@@ -354,7 +361,7 @@ void *LpelStreamRead( lpel_stream_desc_t *sd)
  */
 void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
 {
-  streamPrint(sd->stream,"write");
+  streamPrint2(sd->stream,"write");
   //printf("hrc_stream: some one wrote to stream\n");
   lpel_task_t *self = sd->task;
   int poll_wakeup = 0;
@@ -388,6 +395,7 @@ void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
   }
 
   /* writing to the buffer and checking if consumer polls must be atomic */
+  streamPrint(sd->stream,"going to lock in write");
   PRODLOCK_LOCK( &sd->stream->prod_lock);
   {
     /* there must be space now in buffer */
@@ -401,6 +409,7 @@ void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
       sd->stream->is_poll = 0;
     }
   }
+  streamPrint(sd->stream,"going to unlock in write");
   PRODLOCK_UNLOCK( &sd->stream->prod_lock);
 
 
@@ -519,7 +528,8 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
     lpel_stream_desc_t *sd = LpelStreamIterNext( iter);
     lpel_stream_t *s = sd->stream;
     /* lock stream (prod-side) */
-    PRODLOCK_LOCK( &s->prod_lock);
+    streamPrint(s,"going to lock in poll 1");
+    PRODLOCK_LOCK( &s->prod_lock); 
     { /* CS BEGIN */
       /* check if there is something in the buffer */
       if ( LpelBufferTop( &s->buffer) != NULL) {
@@ -533,6 +543,7 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
           self->wakeup_sd = sd;
         }
         /* unlock stream */
+        streamPrint(s,"going to unloc poll 1");
         PRODLOCK_UNLOCK( &s->prod_lock);
         /* exit loop */
         break;
@@ -549,6 +560,7 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
       }
     } /* CS END */
     /* unlock stream */
+    streamPrint(s,"going to unloc poll 2");
     PRODLOCK_UNLOCK( &s->prod_lock);
   } /* end for each stream */
 
@@ -573,8 +585,10 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
   LpelStreamIterReset(iter, set);
   while( LpelStreamIterHasNext( iter)) {
     lpel_stream_t *s = (LpelStreamIterNext(iter))->stream;
+    streamPrint(s,"going to loc poll 2");
     PRODLOCK_LOCK( &s->prod_lock);
     s->is_poll = 0;
+    streamPrint(s,"going to unloc poll 3");
     PRODLOCK_UNLOCK( &s->prod_lock);
     if (--cnt == 0) break;
   }

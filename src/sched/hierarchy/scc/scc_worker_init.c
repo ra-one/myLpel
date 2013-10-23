@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <float.h>
 
+
 #include <pthread.h>
 #include "arch/mctx.h"
 
@@ -54,8 +55,9 @@ static workerctx_t *worker;
  *
  * @param size    size of the worker set, i.e., the total number of workers including master
  */
-void LpelWorkersInit(int size) {
+void LpelWorkersInit(lpel_config_t *cfg) {
 
+  int size = cfg->num_workers;
 	int i,rank;
 	assert(0 <= size);
 	 
@@ -80,12 +82,21 @@ void LpelWorkersInit(int size) {
     /* allocate waiting table */
     master->waitworkers = (int *) malloc(num_workers * sizeof(int));
     for (i=0; i<num_workers; i++) {
-      master->waitworkers[i] = 0;
+      master->waitworkers[i] = -1;
     }
     master->waitwrappers = (int *) malloc(num_wrappers * sizeof(int));
     for (i=0; i<num_wrappers; i++) {
       master->waitwrappers[i] = 0;
     }
+    
+    /* init waiting monitoring information for master */
+    master->window_size = cfg->wait_window_size;
+    master->wait_threshold = cfg->wait_threshold;
+    master->start_worker_wait = (timeval_t *) malloc(sizeof(timeval_t) * master->num_workers);
+    master->window_wait = (double *) malloc(sizeof(double) * master->window_size);
+    master->window_start = (timeval_t *) malloc(sizeof(timeval_t) * master->window_size);
+    master->next_window_index = 0;
+    master->count_wait = 0;
   } else{
     /*create single worker per core*/
     worker=(workerctx_t *) malloc(sizeof(workerctx_t));
@@ -141,6 +152,9 @@ void LpelWorkersCleanup(void) {
           /* free workers tables */
           free(master->waitworkers);
           free(master->waitwrappers);
+          free(master->start_worker_wait);
+          free(master->window_wait);
+          free(master->window_start);
           free(master);
           WORKER_DBG("CLEAN; master finished");
         } else {
