@@ -8,4 +8,8 @@
 #define free SCCFreePtr
 #endif /*USE_SCC*/
 
+//called by sosi
+void decreaseFrequency();
+void increaseFrequency();
+
 #endif /* _SCC_LPEL_H_ */

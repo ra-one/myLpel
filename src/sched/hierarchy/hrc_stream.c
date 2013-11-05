@@ -537,7 +537,6 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
     lpel_stream_t *s = sd->stream;
     /* lock stream (prod-side) */
     streamPrint(s,"going to lock in poll 1");
-    //PRODLOCK_LOCK( &s->prod_lock); 
 poll1:;
     int count = 0;
     do{
@@ -604,7 +603,6 @@ poll1:;
   while( LpelStreamIterHasNext( iter)) {
     lpel_stream_t *s = (LpelStreamIterNext(iter))->stream;
     streamPrint(s,"going to loc poll 2");
-    //PRODLOCK_LOCK( &s->prod_lock);
 poll2:;
     int count = 0;
     do{

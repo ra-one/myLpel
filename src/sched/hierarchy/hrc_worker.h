@@ -17,6 +17,7 @@
 #define  WORKER_MSG_ASSIGN			3
 #define  WORKER_MSG_REQUEST			4		// worker request task
 #define  WORKER_MSG_RETURN			5		// worker return tasks
+#define  WORKER_MSG_INC_FREQ    6   // call from sosi to change freq
 
 typedef struct timeval timeval_t;
 

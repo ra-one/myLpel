@@ -32,6 +32,8 @@
 #include "lpel/monitor.h"
 #include "lpel_main.h"
 
+#include "scc_lpel.h"
+
 //#define _USE_WORKER_DBG__
 
 #ifdef _USE_WORKER_DBG__
@@ -161,6 +163,20 @@ static void sendWakeup(mailbox_t *mb, lpel_task_t *t)
 /*******************************************************************************
  * MASTER FUNCTION
  ******************************************************************************/
+// only called by sosi
+void increaseFrequency(){
+  //printf("ah ha!! change cpu frequency please %f\n",SCCGetTime());
+  workermsg_t msg;
+  msg.type = WORKER_MSG_INC_FREQ;
+  LpelMailboxSend(mastermb, &msg);
+}
+
+//only called by master
+void decreaseFrequency(){
+  printf("Master: reduce frequency %f\n",SCCGetTime());
+  change_freq(0);
+}
+
 static double time_diff(timeval_t *x , timeval_t *y) // in micro second
 {
   double x_ms , y_ms , diff;
@@ -195,7 +211,8 @@ static void evaluateWaiting(masterctx_t *master, timeval_t *cur) {
   //printf("prop wait %f, %f\n", prop_wait, observe_time);
   if (prop_wait > master->wait_threshold) {
     master->count_wait = 0;
-    printf("reduce frequency\n");
+    //printf("reduce frequency\n");
+    decreaseFrequency();
   }
 }
 
@@ -450,6 +467,12 @@ static void MasterLoop(masterctx_t *master)
       WORKER_DBG("master: Termination message\n");
 			master->terminate = 1;
 			break;
+ 
+    case WORKER_MSG_INC_FREQ:
+      printf("Master: ah ha!! change cpu frequency please %f\n",SCCGetTime());
+      change_freq(1);
+      break;
+
 		default:
 			assert(0);
 		}
@@ -680,6 +703,8 @@ void *WrapperThread(void *arg)
 	LpelThreadAssign(wp->wid);
 	WrapperLoop(wp);
 
+  WORKER_DBG("wrapper: All done wait for SNETGLOBWAIT\n");
+  while(SNETGLOBWAIT);
 	//addFreeWrapper(wp);
 
 #ifdef USE_MCTX_PCL
