@@ -454,6 +454,7 @@ static void MasterLoop(masterctx_t *master)
 			assert(0);
 		}
     WORKER_DBG("master->terminate %d, TaskqueueSize %d, WrapperqueueSize %d\n\n",master->terminate, LpelTaskqueueSize(master->ready_tasks),LpelTaskqueueSize(master->ready_wrappers));
+    fprintf(stderr,"TaskqueueSize %d, WrapperqueueSize %d\n\n",LpelTaskqueueSize(master->ready_tasks),LpelTaskqueueSize(master->ready_wrappers));
 	} while (!(master->terminate && LpelTaskqueueSize(master->ready_tasks) == 0));
 }
 

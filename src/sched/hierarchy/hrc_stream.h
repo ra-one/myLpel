@@ -24,7 +24,7 @@ typedef enum {
 struct lpel_stream_t {
   buffer_t buffer;          /** buffer holding the actual data */
   unsigned int uid;         /** unique sequence number */
-  PRODLOCK_TYPE prod_lock;  /** to support polling a lock is needed */
+  pthread_mutex_t prod_lock;  /** to support polling a lock is needed */
   int is_poll;              /** indicates if a consumer polls this stream,
                                 is_poll is protected by the prod_lock */
   lpel_stream_desc_t *prod_sd;   /** points to the sd of the producer */

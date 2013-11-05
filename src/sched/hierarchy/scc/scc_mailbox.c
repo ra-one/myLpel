@@ -108,6 +108,7 @@ mailbox_t *LpelMailboxCreate(void)
 
 void LpelMailboxDestroy( mailbox_t *mbox)
 {
+  if (mbox == NULL || mbox->list_inbox != NULL ) return;
   mailbox_node_t *node;
 
   assert( mbox->list_inbox == NULL);

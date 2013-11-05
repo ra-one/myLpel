@@ -84,6 +84,10 @@ void LpelWorkersInit(lpel_config_t *cfg) {
     for (i=0; i<num_workers; i++) {
       master->waitworkers[i] = -1;
     }
+    
+    master->first_wait = 0;
+    master->next_wait = 0;   
+  
     master->waitwrappers = (int *) malloc(num_wrappers * sizeof(int));
     for (i=0; i<num_wrappers; i++) {
       master->waitwrappers[i] = 0;
@@ -140,34 +144,34 @@ void setupMailbox(mailbox_t **mastermb, mailbox_t **workermbs) {
 void LpelWorkersCleanup(void) {
 	int i;
 
-        if (SCCIsMaster()) {
-          /* wait for the master to finish */
-          (void) pthread_join(master->thread, NULL);
-          /* clean up master's mailbox */
-          cleanupMasterMb();
-          LpelMailboxDestroy(master->mailbox);
-          LpelTaskqueueDestroy(master->ready_tasks);
-          LpelTaskqueueDestroy(master->ready_wrappers);
+  if (SCCIsMaster()) {
+    /* wait for the master to finish */
+    (void) pthread_join(master->thread, NULL);
+    /* clean up master's mailbox */
+    cleanupMasterMb();
+    LpelMailboxDestroy(master->mailbox);
+    LpelTaskqueueDestroy(master->ready_tasks);
+    LpelTaskqueueDestroy(master->ready_wrappers);
 
-          /* free workers tables */
-          free(master->waitworkers);
-          free(master->waitwrappers);
-          free(master->start_worker_wait);
-          free(master->window_wait);
-          free(master->window_start);
-          free(master);
-          WORKER_DBG("CLEAN; master finished");
-        } else {
-          /* wait for the worker to finish */
-          (void) pthread_join(worker->thread, NULL);
-          LpelMailboxDestroy(worker->mailbox);
-          LpelWorkerDestroyStream(worker);
-          LpelWorkerDestroySd(worker);
-          free(worker);
-          WORKER_DBG("CLEAN; worker finished");
-        }
-        /* clean up local vars used in worker operations */
-        cleanupLocalVar();
+    /* free workers tables */
+    free(master->waitworkers);
+    free(master->waitwrappers);
+    free(master->start_worker_wait);
+    free(master->window_wait);
+    free(master->window_start);
+    free(master);
+    WORKER_DBG("CLEAN; master finished");
+  } else {
+    /* wait for the worker to finish */
+    (void) pthread_join(worker->thread, NULL);
+    LpelMailboxDestroy(worker->mailbox);
+    LpelWorkerDestroyStream(worker);
+    LpelWorkerDestroySd(worker);
+    free(worker);
+    WORKER_DBG("CLEAN; worker finished");
+  }
+  /* clean up local vars used in worker operations */
+  cleanupLocalVar();
 }
 
 

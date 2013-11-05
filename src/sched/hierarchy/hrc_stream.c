@@ -27,20 +27,13 @@
 static atomic_int stream_seq = ATOMIC_VAR_INIT(0);
 
 // print stream info for debug
-void streamPrint(lpel_stream_t *s, char *p){
+void streamPrint (lpel_stream_t *s, char *p){}
+void streamPrint2(lpel_stream_t *s, char *p){}
+
+void streamPrint1(lpel_stream_t *s, char *p){
   printf("stream id: %d %p, prodlock addr: %p, from %s\n",s->uid,s,&s->prod_lock,p);
 }
-void streamPrint2(lpel_stream_t *s, char *p){}
-void streamPrint1(lpel_stream_t *s, char *p){
-  if(s->uid != 3) return;
-  
-  printf("Stream %s: %p\n",p,s);
-  if(s->cons_sd) printf("cons_sd %p, task: %p, stream: %p\n",s->cons_sd,s->cons_sd->task,s->cons_sd->stream);
-  else printf("cons_sd is NULL\n");
-  
-  if(s->prod_sd) printf("prod_sd %p, task: %p, stream: %p\n",s->prod_sd,s->prod_sd->task,s->prod_sd->stream);
-  else printf("prod_sd is NULL\n");
-}
+
 
 /**
  * Create a stream
@@ -63,8 +56,13 @@ lpel_stream_t *LpelStreamCreate(int size)
 
   assert(LpelBufferIsEmpty(&s->buffer));
 
-  s->uid = atomic_fetch_add( &stream_seq, 1);
-  PRODLOCK_INIT( &s->prod_lock );
+  s->uid = (SCCGetNodeRank()*100)+atomic_fetch_add( &stream_seq, 1);
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init( &attr);
+  pthread_mutexattr_setpshared( &attr, PTHREAD_PROCESS_SHARED);
+  pthread_mutex_init(&s->prod_lock,&attr);
+  pthread_mutexattr_destroy(&attr);
+  
   streamPrint(s,"init");
   atomic_init( &s->n_sem, 0);
   atomic_init( &s->e_sem, size);
@@ -91,7 +89,7 @@ lpel_stream_t *LpelStreamCreate(int size)
 void LpelStreamDestroy( lpel_stream_t *s)
 {
   streamPrint(s,"destroy");
-  PRODLOCK_DESTROY( &s->prod_lock);
+  pthread_mutex_destroy(&s->prod_lock);
   atomic_destroy( &s->n_sem);
   atomic_destroy( &s->e_sem);
   LpelBufferCleanup( &s->buffer);
@@ -242,7 +240,7 @@ void LpelStreamReplace( lpel_stream_desc_t *sd, lpel_stream_t *snew)
     MON_CB(stream_replace)(sd->mon, snew->uid);
   }
 #endif
-  printf("\n\n\n\n\t*********************************************************************\n");
+  fprintf(stderr,"\n\n\n\n\t*********************************************************************\n");
 }
 
 
@@ -311,7 +309,9 @@ void *LpelStreamRead( lpel_stream_desc_t *sd)
 
 
   /* read the top element */
-  item = LpelBufferTop( &sd->stream->buffer);
+  do{
+    item = LpelBufferTop( &sd->stream->buffer);
+  } while (item == NULL);
   assert( item != NULL);
   /* pop off the top element */
   LpelBufferPop( &sd->stream->buffer);
@@ -396,7 +396,15 @@ void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
 
   /* writing to the buffer and checking if consumer polls must be atomic */
   streamPrint(sd->stream,"going to lock in write");
-  PRODLOCK_LOCK( &sd->stream->prod_lock);
+write:;
+  int count = 0;
+  do{
+    if(count++ > 1000){ 
+      pthread_mutex_unlock(&sd->stream->prod_lock);
+      usleep(sd->stream->uid); 
+      goto write;
+    }    
+  } while(pthread_mutex_trylock(&sd->stream->prod_lock) != 0);
   {
     /* there must be space now in buffer */
     assert( LpelBufferIsSpace( &sd->stream->buffer) );
@@ -410,7 +418,7 @@ void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
     }
   }
   streamPrint(sd->stream,"going to unlock in write");
-  PRODLOCK_UNLOCK( &sd->stream->prod_lock);
+  pthread_mutex_unlock(&sd->stream->prod_lock);
 
 
 
@@ -529,7 +537,17 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
     lpel_stream_t *s = sd->stream;
     /* lock stream (prod-side) */
     streamPrint(s,"going to lock in poll 1");
-    PRODLOCK_LOCK( &s->prod_lock); 
+    //PRODLOCK_LOCK( &s->prod_lock); 
+poll1:;
+    int count = 0;
+    do{
+      if(count++ > 1000) { 
+        pthread_mutex_unlock(&s->prod_lock);
+        //usleep((s->uid)+1000); 
+        usleep((s->uid)+(SCCGetNodeRank()*10)); 
+        goto poll1;
+      }
+    }while(pthread_mutex_trylock(&s->prod_lock) != 0);
     { /* CS BEGIN */
       /* check if there is something in the buffer */
       if ( LpelBufferTop( &s->buffer) != NULL) {
@@ -544,7 +562,7 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
         }
         /* unlock stream */
         streamPrint(s,"going to unloc poll 1");
-        PRODLOCK_UNLOCK( &s->prod_lock);
+        pthread_mutex_unlock( &s->prod_lock);
         /* exit loop */
         break;
 
@@ -561,7 +579,7 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
     } /* CS END */
     /* unlock stream */
     streamPrint(s,"going to unloc poll 2");
-    PRODLOCK_UNLOCK( &s->prod_lock);
+    pthread_mutex_unlock( &s->prod_lock);
   } /* end for each stream */
 
   /* context switch */
@@ -586,10 +604,20 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
   while( LpelStreamIterHasNext( iter)) {
     lpel_stream_t *s = (LpelStreamIterNext(iter))->stream;
     streamPrint(s,"going to loc poll 2");
-    PRODLOCK_LOCK( &s->prod_lock);
+    //PRODLOCK_LOCK( &s->prod_lock);
+poll2:;
+    int count = 0;
+    do{
+      if(count++ > 1000) { 
+        pthread_mutex_unlock(&s->prod_lock);
+        //usleep((s->uid)+500); 
+        usleep((s->uid)+(SCCGetNodeRank()*20)); 
+        goto poll2;
+      }
+    }while(pthread_mutex_trylock(&s->prod_lock) != 0);
     s->is_poll = 0;
     streamPrint(s,"going to unloc poll 3");
-    PRODLOCK_UNLOCK( &s->prod_lock);
+     pthread_mutex_unlock( &s->prod_lock);
     if (--cnt == 0) break;
   }
 

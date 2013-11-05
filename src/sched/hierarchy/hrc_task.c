@@ -76,7 +76,7 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
     
   t->worker_context = NULL; 
   
-	t->uid = atomic_fetch_add( &taskseq, 1);  /* obtain a unique task id */
+	t->uid = (SCCGetNodeRank()*100)+atomic_fetch_add( &taskseq, 1);  /* obtain a unique task id */
 	t->func = func;
 	t->inarg = inarg;
 
