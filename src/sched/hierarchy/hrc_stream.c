@@ -34,6 +34,15 @@ void streamPrint1(lpel_stream_t *s, char *p){
   printf("stream id: %d %p, prodlock addr: %p, from %s\n",s->uid,s,&s->prod_lock,p);
 }
 
+char* getStreamType(lpel_stream_type type){
+       char *retval;
+  if(type == LPEL_STREAM_ENTRY)       retval = "LPEL_STREAM_ENTRY";
+  else if(type == LPEL_STREAM_EXIT)   retval = "LPEL_STREAM_EXIT";
+  else if(type == LPEL_STREAM_MIDDLE) retval = "LPEL_STREAM_MIDDLE";
+  else                                retval = "STREAM TYPE UNKNOWN";
+  
+  return retval;       
+}
 
 /**
  * Create a stream
@@ -48,12 +57,15 @@ lpel_stream_t *LpelStreamCreate(int size)
   if (0==size) size = STREAM_BUFFER_SIZE;
 
   lpel_stream_t *s;
+  /*
   s = LpelWorkerGetStream();		// try to get from the free list first
   if (s == NULL) {
   	s = (lpel_stream_t *) malloc( sizeof(lpel_stream_t) );		// allocate if fail
   	LpelBufferInit( &s->buffer, size);
-  }
-
+  }*/
+  s = (lpel_stream_t *) malloc( sizeof(lpel_stream_t) );
+  LpelBufferInit( &s->buffer, size);
+  
   assert(LpelBufferIsEmpty(&s->buffer));
 
   s->uid = (SCCGetNodeRank()*100)+atomic_fetch_add( &stream_seq, 1);
@@ -131,9 +143,12 @@ lpel_stream_desc_t *LpelStreamOpen( lpel_stream_t *s, char mode)
   lpel_task_t *ct = LpelTaskSelf();
 
   assert( mode == 'r' || mode == 'w' );
+  /*
   sd = LpelWorkerGetSd(ct->worker_context);			// try to get from the free list
   if (sd == NULL)
    	sd = (lpel_stream_desc_t *) malloc( sizeof( lpel_stream_desc_t));
+  */
+  sd = (lpel_stream_desc_t *) malloc( sizeof( lpel_stream_desc_t));
   sd->task = ct;
   sd->stream = s;
   sd->mode = mode;
@@ -160,7 +175,8 @@ lpel_stream_desc_t *LpelStreamOpen( lpel_stream_t *s, char mode)
   /* set entry/exit stream */
   if (LpelTaskIsWrapper(ct))
   	s->type = (mode == 'r' ? LPEL_STREAM_EXIT : LPEL_STREAM_ENTRY);
-
+  
+  //fprintf(stderr,"task %d opened stream %d mode %c as %d %s\n", ct->uid,s->uid,mode,s->type,getStreamType(s->type));
   STREAM_DBG("task %d open stream %d, mode %c\n", ct->uid, s->uid, mode);
   LpelTaskAddStream(ct, sd, mode);
   streamPrint2(s,"open");
@@ -183,7 +199,7 @@ void LpelStreamClose( lpel_stream_desc_t *sd, int destroy_s)
   }
 #endif
 
-  STREAM_DBG("task %d close one stream, mode %c\n", sd->task->uid, sd->mode);
+  STREAM_DBG("task %d closes stream %d, mode %c\n", sd->task->uid, sd->stream->uid, sd->mode);
   workerctx_t *wc = sd->task->worker_context;
   if (destroy_s) {
   	STREAM_DBG("task %d destroy stream %d, mode %c\n", sd->task->uid, sd->stream->uid, sd->mode);
@@ -367,6 +383,8 @@ void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
   int poll_wakeup = 0;
 
   /* check if opened for writing */
+  if (sd->mode != 'w' ) sd->mode = 'w';
+  if (item == NULL ) while(item == NULL );
   assert( sd->mode == 'w' );
   assert( item != NULL );
 

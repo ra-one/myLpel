@@ -71,6 +71,7 @@ static mailbox_node_t *GetFree( mailbox_t *mbox)
   }
   DCMflush();
   
+  node->next = NULL;
   return node;
 }
 
@@ -135,6 +136,18 @@ void LpelMailboxDestroy( mailbox_t *mbox)
 }
 
 void printListInbox(char* c, mailbox_t *mbox){}
+void printListInbox2(char* c, mailbox_t *mbox){
+  mailbox_node_t *node;
+  printf("%s at %f: mbox %p, id %d , mbox->list_inbox = ",c,SCCGetTime(),mbox,mbox->mbox_ID);
+  if(mbox->list_inbox != NULL){
+    node =  mbox->list_inbox;
+    do{
+    printf("%p-> ",node);
+    node = node->next;
+    } while(node != NULL);
+  }
+  printf("NULL\n");
+}
 void printListInbox1(char* c, mailbox_t *mbox){
   mailbox_node_t *node;
   printf("%s at %f: mbox %p, id %d , mbox->list_inbox = ",c,SCCGetTime(),mbox,mbox->mbox_ID);
@@ -149,7 +162,6 @@ void printListInbox1(char* c, mailbox_t *mbox){
   }
   printf("\n");
 }
-
 
 void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
 {
@@ -180,24 +192,28 @@ void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
   if ( mbox->list_inbox == NULL) {
     MAILBOX_DBG("\nMailbox send: list_inbox is null\n");
     /* list is empty */
+    //mbox->list_inbox = node;
+    //node->next = node; /* self-loop */
+    node->next = NULL;
     mbox->list_inbox = node;
-    node->next = node; /* self-loop */
   } else {
     MAILBOX_DBG("\nMailbox send: list_inbox is NOT null\n");
     /* insert stream between last node=list_inbox
        and first node=list_inbox->next */
-    node->next = mbox->list_inbox->next;
-    mbox->list_inbox->next = node;
+    //node->next = mbox->list_inbox->next;
+    //mbox->list_inbox->next = node;
+    //mbox->list_inbox = node;
+    node->next = mbox->list_inbox;
     mbox->list_inbox = node;
   }
   printListInbox("Send",mbox);
   DCMflush();
+  MAILBOX_DBG_LOCK("Mailbox send: unlocked %d at %f\n\n",mbox->mbox_ID,SCCGetTime());
   if(USE_TSR){
     unlock((mbox->mbox_ID)+20);
   } else {
     atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
   }
-  MAILBOX_DBG_LOCK("Mailbox send: unlocked %d at %f\n\n",mbox->mbox_ID,SCCGetTime());
 }
 
 
@@ -230,13 +246,19 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
   assert( mbox->list_inbox != NULL);
   printListInbox("Recv",mbox);
   /* get first node (handle points to last) */
-  node = mbox->list_inbox->next;
-  if ( node == mbox->list_inbox) {
-    /* self-loop, just single node */
+  //node = mbox->list_inbox->next;
+  node = mbox->list_inbox;
+  if (node->next == NULL){
+    mbox->list_inbox = NULL;
+  } else {
+    mbox->list_inbox = node->next;
+  }
+/*  if ( node == mbox->list_inbox) {
+    // self-loop, just single node
     mbox->list_inbox = NULL;
   } else {
     mbox->list_inbox->next = node->next;
-  }
+  }*/
 
   /* copy the message */
   *msg = node->msg;
@@ -245,14 +267,13 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
   PutFree( mbox, node);
   DCMflush();
   printListInbox("Recv",mbox);
-  
+  MAILBOX_DBG_LOCK("Mailbox recv: unlocked %d at %f\n\n",mbox->mbox_ID,SCCGetTime());
   DCMflush();
   if(USE_TSR){
     unlock((mbox->mbox_ID)+20);
   } else {
     atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
   }
-  MAILBOX_DBG_LOCK("Mailbox recv: unlocked %d at %f\n\n",mbox->mbox_ID,SCCGetTime());
 }
 
 /**

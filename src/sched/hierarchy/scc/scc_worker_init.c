@@ -182,7 +182,7 @@ void LpelWorkersSpawn(void) {
 	if (SCCIsMaster()) {
     /* master spawn joinable thread*/
     (void) pthread_create(&master->thread, NULL, MasterThread, master);
-    //LpelStartMeasurement();
+    LpelStartMeasurement();
   } else if(SCCGetNodeRank() > num_workers) { // +1 for master
     /* wrappers */
     (void) pthread_create(&worker->thread, NULL, WrapperThread, worker);
@@ -193,6 +193,7 @@ void LpelWorkersSpawn(void) {
 }
 
 void *Measurement(void *arg){
+  fprintf(stderr,"================================\n\tMESS start\n================================\n");
   int i=0,j=0;
   do{
      if(i++ > 50000) { j++; i=0; printf("%d\n",j); }
@@ -204,8 +205,6 @@ void *Measurement(void *arg){
 void LpelStartMeasurement(void){
   lpel_task_t *measurementtask;
   measurementtask = LpelTaskCreate( -1, Measurement, NULL, 8192);
-  //int *id = (int*) measurementtask + 2; // set task id
-  //*id = 99999;
   LpelTaskStart(measurementtask);
 }
   
