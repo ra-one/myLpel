@@ -193,6 +193,26 @@ void LpelWorkersSpawn(void) {
 }
 
 void *Measurement(void *arg){
+  FILE *fout;
+  fout = fopen("out/voltOut.txt", "w");
+
+  if (fout == NULL)fprintf(stderr, "Can't open output file!\n");
+  
+  startPowerMeasurement(1);
+  fprintf(stderr,"================================\n\tMESS start\n================================\n");
+  do{
+    powerMeasurement(fout);
+  }while(MESSTOP != 9);
+  fprintf(stderr,"================================\n\tMESS stop\n================================\n");
+  //startPowerMeasurement(0);
+  //fclose (fout);
+  
+  // change permission of voltout so can be accessed on mcpc
+	system("chmod 666 out/*");
+  return NULL;
+}
+
+void *Measurement1(void *arg){
   fprintf(stderr,"================================\n\tMESS start\n================================\n");
   int i=0,j=0;
   do{
