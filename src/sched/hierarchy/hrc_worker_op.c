@@ -173,7 +173,7 @@ void increaseFrequency(){
 
 //only called by master
 void decreaseFrequency(){
-  printf("Master: reduce frequency %f\n",SCCGetTime());
+  printf("Master: decrease frequency %f\n",SCCGetTime());
   change_freq(0);
 }
 
@@ -189,8 +189,7 @@ static double time_diff(timeval_t *x , timeval_t *y) // in micro second
   return diff;
 }
 
-
-/* evaluate waiting time of all workers, consider decrease cpu frequency */
+/* evaluate waiting time of all workers, consider decrease cpu frequency 
 static void evaluateWaiting(masterctx_t *master, timeval_t *cur) {
   // if wait_threshold is < 0 then do not change freq
   if (master->wait_threshold < 0) return; 
@@ -214,6 +213,32 @@ static void evaluateWaiting(masterctx_t *master, timeval_t *cur) {
     //printf("reduce frequency\n");
     decreaseFrequency();
   }
+}*/
+
+/* evaluate waiting time of all workers, consider decrease cpu frequency */
+static void evaluateWaiting(masterctx_t *master, double cur) {
+  // if wait_threshold is < 0 then do not change freq
+  if (master->wait_threshold < 0) return; 
+  
+  master->count_wait++;
+  
+  // skip when waiting window is not full
+  if (master->count_wait < master->window_size) return;
+
+  int i;
+  double wait = 0.0;
+  for (i = 0; i < master->window_size; i++) {
+    wait = wait + master->window_wait[i];
+  }
+  int first = master->next_window_index; // when the window is full, the next index in the window is the first waiting time, i.e. the one will be overwritten next
+  double observe_time = ((cur*1000000)-(master->window_start[first]*1000000));
+  double prop_wait = wait*100.0/(master->num_workers * observe_time);
+  //printf("prop wait %f, %f\n", prop_wait, observe_time);
+  if (prop_wait > master->wait_threshold) {
+    master->count_wait = 0;
+    //printf("reduce frequency\n");
+    decreaseFrequency();
+  }
 }
 
 /* add a worker to the waiting list */
@@ -224,7 +249,8 @@ static void addWait(masterctx_t *master, int worker) {
   master->waitworkers[master->next_wait] = worker;
   master->next_wait = (master->next_wait + 1) % master->num_workers;
   // get time when it start waiting
-  gettimeofday(&master->start_worker_wait[worker], NULL);
+  //gettimeofday(&master->start_worker_wait[worker], NULL);
+  master->start_worker_wait[worker] = SCCGetTime();
 }
 
 /* get the first waiting worker, if non, return -1 */
@@ -239,14 +265,18 @@ static int getWait(masterctx_t *master) {
   master->first_wait = (master->first_wait + 1) % master->num_workers;
 
   // get time when it stop waiting
-  timeval_t cur_time;
-  gettimeofday(&cur_time, NULL);
-  double wait = time_diff(&master->start_worker_wait[worker], &cur_time);
+  //timeval_t cur_time;
+  //gettimeofday(&cur_time, NULL);
+  double cur_time = SCCGetTime();
+  //double wait = time_diff(&master->start_worker_wait[worker], &cur_time);
+  
+  double wait = ((cur_time*1000000)-(master->start_worker_wait[worker]*1000000));
   master->window_wait[master->next_window_index] = wait;
   master->window_start[master->next_window_index] = master->start_worker_wait[worker]; /* only update when accounting new waiting period */
   master->next_window_index = (master->next_window_index + 1) % master->window_size;
   //printf("new wait: time %f, start %f, %f\n", wait, master->start_worker_wait[worker].tv_sec, master->start_worker_wait[worker].tv_usec);
-  evaluateWaiting(master, &cur_time);
+  //evaluateWaiting(master, &cur_time);
+  evaluateWaiting(master, cur_time);
 
   return worker;
 }
@@ -469,7 +499,7 @@ static void MasterLoop(masterctx_t *master)
 			break;
  
     case WORKER_MSG_INC_FREQ:
-      printf("Master: ah ha!! change cpu frequency please %f\n",SCCGetTime());
+      printf("Master: increase frequency %f\n",SCCGetTime());
       change_freq(1);
       break;
 
@@ -607,7 +637,8 @@ static void WrapperLoop(workerctx_t *wp)
 		t = wp->current_task;
 		if (t != NULL) {
 			/* execute task */
-      WORKER_DBG("wrapper: switch to task %d\n", t->uid);
+      WORKER_DBG("wrapper: switch to task %d wp %p, t %p\n", t->uid,&wp->mctx,&t->mctx);
+      fprintf(stderr,"\nwrapper: switch to task %d\n", t->uid);
 			mctx_switch(&wp->mctx, &t->mctx);
 		} else {
 FirstTask:

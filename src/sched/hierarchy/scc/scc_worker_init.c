@@ -96,9 +96,9 @@ void LpelWorkersInit(lpel_config_t *cfg) {
     /* init waiting monitoring information for master */
     master->window_size = cfg->wait_window_size;
     master->wait_threshold = cfg->wait_threshold;
-    master->start_worker_wait = (timeval_t *) malloc(sizeof(timeval_t) * master->num_workers);
+    master->start_worker_wait = (double *) malloc(sizeof(double) * master->num_workers);
     master->window_wait = (double *) malloc(sizeof(double) * master->window_size);
-    master->window_start = (timeval_t *) malloc(sizeof(timeval_t) * master->window_size);
+    master->window_start = (double *) malloc(sizeof(double) * master->window_size);
     master->next_window_index = 0;
     master->count_wait = 0;
   } else{
@@ -124,6 +124,7 @@ void LpelWorkersInit(lpel_config_t *cfg) {
     worker->free_sd = NULL;
     worker->free_stream = NULL;
     WORKER_DBG("workerInit: node physical location %d, rank %d, wid %d\n",SCCGetNodeID(), SCCGetNodeRank(),worker->wid);
+    printf("workerInit: node physical location %d, rank %d, wid %d\n",SCCGetNodeID(), SCCGetNodeRank(),worker->wid);
   }
 }
 
@@ -182,7 +183,7 @@ void LpelWorkersSpawn(void) {
 	if (SCCIsMaster()) {
     /* master spawn joinable thread*/
     (void) pthread_create(&master->thread, NULL, MasterThread, master);
-    LpelStartMeasurement();
+    //LpelStartMeasurement();
   } else if(SCCGetNodeRank() > num_workers) { // +1 for master
     /* wrappers */
     (void) pthread_create(&worker->thread, NULL, WrapperThread, worker);

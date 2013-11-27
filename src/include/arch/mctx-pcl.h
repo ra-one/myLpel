@@ -22,6 +22,12 @@ static inline int mctx_create(mctx_t *mctx, void *func, void *arg, char *sk_addr
 
 static inline void mctx_switch(mctx_t *octx, mctx_t *nctx)
 {
+  //fprintf(stderr,"switch to %p\n",nctx);
+  (void) co_call(*nctx);
+}
+
+static inline void mctx_switchOLD(mctx_t *octx, mctx_t *nctx)
+{
 #ifdef USE_SCC
   DCMflush();
   (void) co_call(*nctx);
@@ -29,7 +35,6 @@ static inline void mctx_switch(mctx_t *octx, mctx_t *nctx)
 #else /*USE_SCC*/
   (void) co_call(*nctx);
 #endif /*USE_SCC*/
-
 }
 
 

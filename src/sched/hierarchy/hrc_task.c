@@ -105,6 +105,7 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 	t->sched_info.in_streams = NULL;
 	t->sched_info.out_streams = NULL;
   //printf("task %p, id %d, context %p\n",t,t->uid,t->worker_context);
+  printf("task %d %p\n",t->uid,t);
 	return t;
 }
 

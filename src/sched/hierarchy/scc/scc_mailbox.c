@@ -30,6 +30,7 @@ struct mailbox_t {
   pthread_mutex_t     lock_inbox;
   mailbox_node_t      *list_free;
   mailbox_node_t      *list_inbox;
+  mailbox_node_t      *tail;
   int                 mbox_ID;
 };
 
@@ -93,7 +94,6 @@ static void PutFree( mailbox_t *mbox, mailbox_node_t *node)
 
 mailbox_t *LpelMailboxCreate(void)
 {
- 
   mailbox_t *mbox = allMbox[SCCGetNodeRank()];
 
   pthread_mutexattr_init( &attr);
@@ -102,6 +102,7 @@ mailbox_t *LpelMailboxCreate(void)
   pthread_mutex_init( &mbox->lock_inbox, &attr);
   mbox->list_free  = NULL;
   mbox->list_inbox = NULL;
+  mbox->tail = NULL;
   mbox->mbox_ID = SCCGetNodeID();
   DCMflush();
   return mbox;
@@ -135,6 +136,18 @@ void LpelMailboxDestroy( mailbox_t *mbox)
   pthread_mutexattr_destroy(&attr);
 }
 
+/**
+ * @return 1 if there is an incoming msg, 0 otherwise
+ * @note: does not need to be locked as a 'missed' msg
+ *        will be eventually fetched in the next worker loop
+ */
+int LpelMailboxHasIncoming( mailbox_t *mbox)
+{
+  DCMflush();
+  return ( mbox->list_inbox != NULL);
+}
+
+
 void printListInbox(char* c, mailbox_t *mbox){}
 void printListInbox2(char* c, mailbox_t *mbox){
   mailbox_node_t *node;
@@ -163,7 +176,104 @@ void printListInbox1(char* c, mailbox_t *mbox){
   printf("\n");
 }
 
+
 void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
+{
+  if(USE_TSR){
+    lock((mbox->mbox_ID)+20);
+  } else {
+    int value=-1,pFlag=1,dbgValue = -1;
+    while(value != 0){
+      atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
+      if(pFlag && value != 0) {
+        pFlag=0;
+        atomic_readR(&atomic_inc_regs[mbox->mbox_ID],&dbgValue);
+        MAILBOX_DBG_LOCK("\nmailbox send to %d: Inside Wait, value: %d, reading %d\n",mbox->mbox_ID,value,dbgValue); 
+      }
+    }
+  }
+  
+  MAILBOX_DBG_LOCK("Mailbox send: locked %d at %f\n",mbox->mbox_ID,SCCGetTime());
+    
+  /* get a free node from recepient */
+  mailbox_node_t *node = GetFree( mbox);
+
+  /* copy the message */
+  node->msg = *msg;
+  printListInbox("Send bfor",mbox);
+  
+  /* put node into inbox */
+  node->next = NULL;
+  if ( mbox->tail == NULL) {
+    mbox->list_inbox = mbox->tail = node;
+  } else {
+    mbox->tail->next = node;
+    mbox->tail = node;
+  }
+  
+  printListInbox("Send aftr",mbox);
+  MAILBOX_DBG_LOCK("Mailbox send: unlocked %d at %f\n\n",mbox->mbox_ID,SCCGetTime());
+  if(USE_TSR){
+    unlock((mbox->mbox_ID)+20);
+  } else {
+    atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
+  }
+}
+
+
+void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
+{
+  mailbox_node_t *node;
+  bool message=false,go_on=false;
+  
+  while(go_on==false){
+    if(mbox->list_inbox != NULL){
+      if(USE_TSR){
+        lock((mbox->mbox_ID)+20);
+      } else {
+        int value=-1,pFlag=1,dbgValue = -1;
+      	while(value != 0){
+  		    atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
+          if(pFlag && value != 0) {
+            pFlag=0;
+            atomic_readR(&atomic_inc_regs[mbox->mbox_ID],&dbgValue);
+            MAILBOX_DBG_LOCK("\nmailbox recv on %d: Inside Wait, value: %d, reading %d\n",mbox->mbox_ID,value,dbgValue); 
+          }
+        }
+      }      	
+      MAILBOX_DBG_LOCK("Mailbox recv: locked %d at %f\n",mbox->mbox_ID,SCCGetTime());
+      go_on=true;
+    }
+  }
+  assert( mbox->list_inbox != NULL);
+  printListInbox("Recv bfor",mbox);
+
+  node = mbox->list_inbox;
+  if (node->next == NULL){
+    mbox->list_inbox = mbox->tail = NULL;
+  } else {
+    mbox->list_inbox = node->next;
+  }
+
+  /* copy the message */
+  *msg = node->msg;
+  
+  /* put node into free pool */
+  PutFree( mbox, node);
+  printListInbox("Recv aftr",mbox);
+  MAILBOX_DBG_LOCK("Mailbox recv: unlocked %d at %f\n\n",mbox->mbox_ID,SCCGetTime());
+  if(USE_TSR){
+    unlock((mbox->mbox_ID)+20);
+  } else {
+    atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
+  }
+}
+
+
+
+
+
+void LpelMailboxSend1( mailbox_t *mbox, workermsg_t *msg)
 {
   if(USE_TSR){
     lock((mbox->mbox_ID)+20);
@@ -217,7 +327,7 @@ void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
 }
 
 
-void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
+void LpelMailboxRecv1( mailbox_t *mbox, workermsg_t *msg)
 {
   mailbox_node_t *node;
   bool message=false,go_on=false;
@@ -276,13 +386,3 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
   }
 }
 
-/**
- * @return 1 if there is an incoming msg, 0 otherwise
- * @note: does not need to be locked as a 'missed' msg
- *        will be eventually fetched in the next worker loop
- */
-int LpelMailboxHasIncoming( mailbox_t *mbox)
-{
-  DCMflush();
-  return ( mbox->list_inbox != NULL);
-}

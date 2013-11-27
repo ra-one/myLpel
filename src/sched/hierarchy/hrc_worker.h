@@ -55,9 +55,9 @@ typedef struct masterctx_t {
   /* info for waiting time monitoring */
   int window_size;
   int wait_threshold;
-  timeval_t *start_worker_wait; // array of start of waiting time for worker, index is wid
+  double *start_worker_wait; // array of start of waiting time for worker, index is wid
   double *window_wait;
-  timeval_t *window_start;
+  double *window_start;
   int next_window_index;  // 
   unsigned int count_wait;
 } masterctx_t;

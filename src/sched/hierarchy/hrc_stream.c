@@ -28,14 +28,20 @@ static atomic_int stream_seq = ATOMIC_VAR_INIT(0);
 
 // print stream info for debug
 void streamPrint (lpel_stream_t *s, char *p){}
-void streamPrint2(lpel_stream_t *s, char *p){}
+void streamPrint2(lpel_stream_t *s,lpel_task_t *t, char *p){}
+void streamPrint21(lpel_stream_t *s,lpel_task_t *t, char *p){
+  if(s->uid < 100){
+    if(t != NULL) fprintf(stderr,"task: %d %p, stream id: %d %p %s\n",t->uid,t,s->uid,s,p);
+    else fprintf(stderr,"stream id: %d %p %s\n",s->uid,s,p);
+  }
+}
 
 void streamPrint1(lpel_stream_t *s, char *p){
   printf("stream id: %d %p, prodlock addr: %p, from %s\n",s->uid,s,&s->prod_lock,p);
 }
 
 char* getStreamType(lpel_stream_type type){
-       char *retval;
+  char *retval;
   if(type == LPEL_STREAM_ENTRY)       retval = "LPEL_STREAM_ENTRY";
   else if(type == LPEL_STREAM_EXIT)   retval = "LPEL_STREAM_EXIT";
   else if(type == LPEL_STREAM_MIDDLE) retval = "LPEL_STREAM_MIDDLE";
@@ -176,10 +182,10 @@ lpel_stream_desc_t *LpelStreamOpen( lpel_stream_t *s, char mode)
   if (LpelTaskIsWrapper(ct))
   	s->type = (mode == 'r' ? LPEL_STREAM_EXIT : LPEL_STREAM_ENTRY);
   
-  //fprintf(stderr,"task %d opened stream %d mode %c as %d %s\n", ct->uid,s->uid,mode,s->type,getStreamType(s->type));
+  //if(s->uid < 100)fprintf(stderr,"task %d opened stream %d mode %c as %d %s\n", ct->uid,s->uid,mode,s->type,getStreamType(s->type));
   STREAM_DBG("task %d open stream %d, mode %c\n", ct->uid, s->uid, mode);
   LpelTaskAddStream(ct, sd, mode);
-  streamPrint2(s,"open");
+  streamPrint2(s,NULL,"open");
   return sd;
 }
 
@@ -191,7 +197,7 @@ lpel_stream_desc_t *LpelStreamOpen( lpel_stream_t *s, char mode)
  */
 void LpelStreamClose( lpel_stream_desc_t *sd, int destroy_s)
 {
-  streamPrint2(sd->stream,"close");
+  streamPrint2(sd->stream,sd->task,"close");
   /* MONITORING CALLBACK */
 #ifdef USE_TASK_EVENT_LOGGING
   if (sd->mon && MON_CB(stream_close)) {
@@ -300,8 +306,9 @@ void *LpelStreamRead( lpel_stream_desc_t *sd)
 {
   void *item;
   lpel_task_t *self = sd->task;
+  if (sd->mode != 'r' ) sd->mode = 'r';
   assert( sd->mode == 'r');
-  streamPrint2(sd->stream,"read");
+  streamPrint2(sd->stream,self,"read");
   /* MONITORING CALLBACK */
 #ifdef USE_TASK_EVENT_LOGGING
   if (sd->mon && MON_CB(stream_readprepare)) {
@@ -377,9 +384,9 @@ void *LpelStreamRead( lpel_stream_desc_t *sd)
  */
 void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
 {
-  streamPrint2(sd->stream,"write");
   //printf("hrc_stream: some one wrote to stream\n");
   lpel_task_t *self = sd->task;
+  streamPrint2(sd->stream,self,"write");
   int poll_wakeup = 0;
 
   /* check if opened for writing */
