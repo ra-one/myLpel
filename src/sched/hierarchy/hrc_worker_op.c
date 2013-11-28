@@ -735,7 +735,7 @@ void *WrapperThread(void *arg)
 	WrapperLoop(wp);
 
   WORKER_DBG("wrapper: All done wait for SNETGLOBWAIT\n");
-  while(SNETGLOBWAIT);
+  while(SNETGLOBWAIT != SNETGLOBWAITVAL);
 	//addFreeWrapper(wp);
 
 #ifdef USE_MCTX_PCL
@@ -809,6 +809,7 @@ static void WorkerLoop(workerctx_t *wc)
   	  case WORKER_MSG_ASSIGN:
   	  	t = msg.body.task;
   	  	WORKER_DBG("worker %d: got task %d, isWrapper: %d\n", wc->wid, t->uid,t->wrapper);
+        printf("worker %d: got task %d, isWrapper: %d\n", wc->wid, t->uid,t->wrapper);
         assert(t->state == TASK_READY);
   	  	t->worker_context = wc;
   	  	wc->current_task = t;

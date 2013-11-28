@@ -225,8 +225,9 @@ void LpelTaskYield(void)
  */
 void LpelTaskBlockStream(lpel_task_t *t)
 {
+  printf("task %d, t->wrapper %d,state :%c:\n",t->uid,t->wrapper,t->state);
 	/* a reference to it is held in the stream */
-	assert( t->state == TASK_RUNNING );
+	if(!(t->wrapper)){assert( t->state == TASK_RUNNING );}
 	t->state = TASK_BLOCKED;
 	TaskStop( t);
 	LpelWorkerTaskBlock(t);
