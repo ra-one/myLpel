@@ -3,9 +3,9 @@
 
 #ifdef USE_SCC
 #include "scc.h"
-#define malloc SCCMallocPtr
-#define valloc SCCMallocPtr
-#define free SCCFreePtr
+//#define malloc SCCMallocPtr
+//#define valloc SCCMallocPtr
+//#define free SCCFreePtr
 #endif /*USE_SCC*/
 
 //called by sosi

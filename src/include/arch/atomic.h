@@ -29,13 +29,15 @@
 typedef int bool;
 #endif
 
+#include "atomic-pthread.h"
 
+/*
 #if (__STDC_VERSION__ >= 201112L) && !defined(__STDC_NO_ATOMICS__)
 #include "atomic-stdc.h"
 
 #elif  (__GNUC__ > 4) || \
   (__GNUC__==4) && (__GNUC_MINOR__ >= 1) && (__GNUC_PATCHLEVEL__ >= 0)
-/* gcc/icc compiler builtin atomics  */
+// gcc/icc compiler builtin atomics 
 #include "atomic-builtin.h"
 
 #else
@@ -43,6 +45,6 @@ typedef int bool;
 #include "atomic-pthread.h"
 
 #endif
-
+*/
 
 #endif /* _ATOMIC_H_ */

@@ -15,7 +15,8 @@
 #include "hrc_taskqueue.h"
 #include "hrc_task.h"
 
-#define BLOCKSIZE 50
+//#define BLOCKSIZE 50
+#define BLOCKSIZE 100
 
 struct taskqueue_t{
   lpel_task_t **heap;
@@ -81,11 +82,13 @@ taskqueue_t* LpelTaskqueueInit() {
  * Add a task to the task queue
  */
 void LpelTaskqueuePush( taskqueue_t *tq, lpel_task_t *t){
-
+   
   //allocate more memory if needed
   if (tq->count >= tq->alloc) {
+    printf("********************************************* in REALLOC before tq->heap %p\n",tq->heap);
     tq->alloc = tq->alloc + BLOCKSIZE;
     tq->heap = realloc(tq->heap, tq->alloc *sizeof(taskqueue_t*));
+    printf("********************************************* in REALLOC after tq->heap %p\n\n",tq->heap);
   }
 
   tq->heap[tq->count] = t;

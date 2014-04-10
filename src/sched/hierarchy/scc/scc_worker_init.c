@@ -72,6 +72,7 @@ void LpelWorkersInit(lpel_config_t *cfg) {
   if (SCCIsMaster()) {
     /** create master */
     master = (masterctx_t *) malloc(sizeof(masterctx_t));
+    //master = (masterctx_t *) SCCMallocPtr(sizeof(masterctx_t));
     master->mailbox = mbox;
     master->ready_tasks = LpelTaskqueueInit ();
     master->ready_wrappers = LpelTaskqueueInit();
@@ -103,28 +104,22 @@ void LpelWorkersInit(lpel_config_t *cfg) {
     master->count_wait = 0;
   } else{
     /*create single worker per core*/
-    worker=(workerctx_t *) malloc(sizeof(workerctx_t));
+    worker=(workerctx_t *) SCCMallocPtr(sizeof(workerctx_t));
     rank = SCCGetNodeRank();
     if ( rank > num_workers){
       worker->wid=(rank-(rank+rank))+1; //convert rank to negative 
     } else {
       worker->wid=rank-1;
     }
-#ifdef USE_LOGGING
-    if (MON_CB(worker_create)) {
-      worker->mon = MON_CB(worker_create)(worker->wid);
-    } else {
-      worker->mon = NULL;
-    }
-#else
     worker->mon = NULL;
-#endif
+
     /* mailbox */
     worker->mailbox = mbox;
     worker->free_sd = NULL;
     worker->free_stream = NULL;
-    WORKER_DBG("workerInit: node physical location %d, rank %d, wid %d\n",SCCGetNodeID(), SCCGetNodeRank(),worker->wid);
-    printf("workerInit: node physical location %d, rank %d, wid %d\n",SCCGetNodeID(), SCCGetNodeRank(),worker->wid);
+    worker->next = NULL;
+    WORKER_DBG("workerInit: node physical location %d, rank %d, wid %d, worker->mailbox %p\n",SCCGetNodeID(), SCCGetNodeRank(),worker->wid,worker->mailbox);
+    printf("workerInit: node physical location %d, rank %d, wid %d, worker->mailbox %p\n",SCCGetNodeID(), SCCGetNodeRank(),worker->wid,worker->mailbox);
   }
 }
 
@@ -161,6 +156,7 @@ void LpelWorkersCleanup(void) {
     free(master->window_wait);
     free(master->window_start);
     free(master);
+    //SCCFreePtr(master);
     WORKER_DBG("CLEAN; master finished");
   } else {
     /* wait for the worker to finish */
@@ -168,7 +164,7 @@ void LpelWorkersCleanup(void) {
     LpelMailboxDestroy(worker->mailbox);
     LpelWorkerDestroyStream(worker);
     LpelWorkerDestroySd(worker);
-    free(worker);
+    SCCFreePtr(worker);
     WORKER_DBG("CLEAN; worker finished");
   }
   /* clean up local vars used in worker operations */
@@ -193,50 +189,6 @@ void LpelWorkersSpawn(void) {
 	}
 }
 
-void *Measurement(void *arg){
-  FILE *fout;
-  fout = fopen("out/voltOut.txt", "w");
-
-  if (fout == NULL)fprintf(stderr, "Can't open output file!\n");
-  
-  startPowerMeasurement(1);
-  fprintf(stderr,"================================\n\tMESS start\n================================\n");
-  do{
-    powerMeasurement(fout);
-  }while(MESSTOP != 9);
-  fprintf(stderr,"================================\n\tMESS stop\n================================\n");
-  //startPowerMeasurement(0);
-  //fclose (fout);
-  
-  // change permission of voltout so can be accessed on mcpc
-	system("chmod 666 out/*");
-  return NULL;
-}
-
-void *Measurement1(void *arg){
-  fprintf(stderr,"================================\n\tMESS start\n================================\n");
-  int i=0,j=0;
-  do{
-     if(i++ > 50000) { j++; i=0; printf("%d\n",j); }
-  }while(!MESSTOP);
-  printf("i: %d, j: %d\n",i,j);
-  return NULL;
-}
-
-void LpelStartMeasurement(void){
-  lpel_task_t *measurementtask;
-  measurementtask = LpelTaskCreate( -1, Measurement, NULL, 8192);
-  LpelTaskStart(measurementtask);
-}
-  
-/*
- * Terminate master and workers
- */
-void LpelWorkersTerminate1(void) {
-	workermsg_t msg;
-	msg.type = WORKER_MSG_TERMINATE;
-	LpelMailboxSend(master->mailbox, &msg);
-}
 
 /************************ Private functions ***********************************/
 /*

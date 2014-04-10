@@ -16,8 +16,7 @@
 #include <lpel_common.h>
 
 #include "arch/mctx.h"
-#include "lpel_hwloc.h"
-#include "lpelcfg.h"
+#include "lpelcfg.h"    // lpel cfg
 #include "lpel_main.h"
 
 #ifdef USE_SCC
@@ -29,24 +28,7 @@
  */
 int LpelGetNumCores( int *result)
 {
-  int proc_avail = -1;
-#ifdef HAVE_SYSCONF
-  /* query the number of CPUs */
-  proc_avail = sysconf(_SC_NPROCESSORS_ONLN);
-#endif
-  if (proc_avail == -1) {
-      char *p = getenv("LPEL_NUM_WORKERS");
-      if (p != 0)
-      {
-          unsigned long n = strtoul(p, 0, 0);
-          if (errno != EINVAL)
-              proc_avail = n;
-      }
-  }
-  if (proc_avail == -1) {
-    return LPEL_ERR_FAIL;
-  }
-  *result = proc_avail;
+  *result = 1;
   return 0;
 }
 
@@ -69,13 +51,6 @@ void LpelInit(lpel_config_t *cfg)
   /* store a local copy of cfg */
   _lpel_global_config = *cfg;
   
-#ifdef USE_SCC
-  //SCCInit(0,_lpel_global_config.num_workers);
-#else
-  /* Initialise hardware information for thread pinning */
-  LpelHwLocInit(cfg);
-#endif /*USE_SCC*/
-
 #ifdef USE_MCTX_PCL
   int res = co_thread_init();
   /* initialize machine context for main thread */
@@ -87,13 +62,7 @@ void LpelInit(lpel_config_t *cfg)
 int LpelStart(lpel_config_t *cfg)
 {
   int res;
-#ifndef USE_SCC
-  /* check the config */
-  res = LpelHwLocCheckConfig(cfg);
-  if (res) return res;
 
-  LpelHwLocStart(cfg);
-#endif /*USE_SCC*/
   /* initialise workers */
   LpelWorkersInit( cfg);
 
@@ -118,9 +87,6 @@ void LpelCleanup(void)
 {
   /* Cleanup workers */
   LpelWorkersCleanup();
-
-  /* Cleanup hardware info */
-  LpelHwLocCleanup();
 
 #ifdef USE_MCTX_PCL
   /* cleanup machine context for main thread */

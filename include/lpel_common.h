@@ -120,6 +120,8 @@ typedef enum {
  */
 typedef struct {
   int num_workers;
+  int num_wrappers;
+  int enable_dvfs;
   int proc_workers;
   int proc_others;
   int flags;
@@ -251,7 +253,7 @@ void *LpelStreamPeek(     lpel_stream_desc_t *sd);
 void *LpelStreamRead(     lpel_stream_desc_t *sd);
 void  LpelStreamWrite(    lpel_stream_desc_t *sd, void *item);
 int   LpelStreamTryWrite( lpel_stream_desc_t *sd, void *item);
-
+void  LpelSdPrint( 		  lpel_stream_desc_t *sd);
 lpel_stream_t *LpelStreamGet(lpel_stream_desc_t *sd);
 int LpelStreamGetId(lpel_stream_desc_t *sd);
 

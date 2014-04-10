@@ -116,7 +116,7 @@ int LpelStreamsetIsEmpty( lpel_streamset_t *set)
 lpel_stream_iter_t *LpelStreamIterCreate( lpel_streamset_t *set)
 {
   lpel_stream_iter_t *iter =
-    (lpel_stream_iter_t *) malloc( sizeof( lpel_stream_iter_t));
+    (lpel_stream_iter_t *) SCCMallocPtr( sizeof( lpel_stream_iter_t));
   if (set) {
     iter->prev = *set;
     iter->set = set;
@@ -135,7 +135,7 @@ lpel_stream_iter_t *LpelStreamIterCreate( lpel_streamset_t *set)
  */
 void LpelStreamIterDestroy( lpel_stream_iter_t *iter)
 {
-  free(iter);
+  SCCFreePtr(iter);
 }
 
 

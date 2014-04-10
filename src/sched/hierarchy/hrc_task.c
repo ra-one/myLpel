@@ -13,6 +13,7 @@
 #include "scc.h"
 
 static atomic_int taskseq = ATOMIC_VAR_INIT(0);
+
 static int neg_demand_lim = 0;
 
 static double (*prior_cal) (int in, int out) = priorfunc14;
@@ -54,19 +55,12 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 	assert( size >= TASK_MINSIZE );
 
 	/* aligned to page boundary */
-	t = valloc( size );
+	t = SCCMallocPtr( size );
 
 	/* calc stackaddr */
 	offset = (sizeof(lpel_task_t) + TASK_STACK_ALIGN-1) & ~(TASK_STACK_ALIGN-1);
 	stackaddr = (char *) t + offset;
 	t->size = size;
-
-  /*
-	if (map != LPEL_MAP_MASTER )	// others wrapper or source/sink
-		t->worker_context = LpelCreateWrapperContext(map);
-	else   
-		t->worker_context = NULL;
-  */
   
   //all tasks should be created and sent to master
   if (map == LPEL_MAP_MASTER )	
@@ -77,6 +71,7 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
   t->worker_context = NULL; 
   
 	t->uid = (SCCGetNodeRank()*100)+atomic_fetch_add( &taskseq, 1);  /* obtain a unique task id */
+  if(t->uid < 100) {printf("taskSize : %d\n",sizeof(lpel_task_t));}
 	t->func = func;
 	t->inarg = inarg;
 
@@ -100,7 +95,7 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 	// default scheduling info
 	t->sched_info.prior = 0;
 	t->sched_info.rec_cnt = 0;
-	t->sched_info.rec_limit = 0;
+	t->sched_info.rec_limit = -1;
 	t->sched_info.rec_limit_factor = -1;
 	t->sched_info.in_streams = NULL;
 	t->sched_info.out_streams = NULL;
@@ -119,13 +114,6 @@ void LpelTaskDestroy( lpel_task_t *t)
 {
 	assert( t->state == TASK_ZOMBIE);
 
-#ifdef USE_TASK_EVENT_LOGGING
-	/* if task had a monitoring object, destroy it */
-	if (t->mon && MON_CB(task_destroy)) {
-		MON_CB(task_destroy)(t->mon);
-	}
-#endif
-
 	atomic_destroy( &t->poll_token);
 
 	//FIXME
@@ -133,11 +121,10 @@ void LpelTaskDestroy( lpel_task_t *t)
 	co_delete(t->mctx);
 #endif
 
-
 	assert(t->sched_info.in_streams == NULL);
 	assert(t->sched_info.out_streams == NULL);
 	/* free the TCB itself*/
-	free(t);
+	SCCFreePtr(t);
 }
 
 
@@ -225,11 +212,12 @@ void LpelTaskYield(void)
  */
 void LpelTaskBlockStream(lpel_task_t *t)
 {
-  printf("task %d, t->wrapper %d,state :%c:\n",t->uid,t->wrapper,t->state);
+	//printf("LpelTaskBlockStream 1: task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",t->uid,t->wrapper,t->state,t->worker_context,t->worker_context->wid,t->worker_context->mctx);
 	/* a reference to it is held in the stream */
 	if(!(t->wrapper)){assert( t->state == TASK_RUNNING );}
 	t->state = TASK_BLOCKED;
-	TaskStop( t);
+	//TaskStop( t);
+	//printf("LpelTaskBlockStream 2: task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",t->uid,t->wrapper,t->state,t->worker_context,t->worker_context->wid,t->worker_context->mctx);
 	LpelWorkerTaskBlock(t);
 	TaskStart( t);		// task will be backed here when it is dispatched the next time
 
@@ -290,12 +278,6 @@ static void TaskStart( lpel_task_t *t)
 	// TODO reset task scheduling info
 
 	assert( t->state == TASK_READY );
-	/* MONITORING CALLBACK */
-#ifdef USE_TASK_EVENT_LOGGING
-	if (t->mon && MON_CB(task_start)) {
-		MON_CB(task_start)(t->mon);
-	}
-#endif
 
 	t->sched_info.rec_cnt = 0;	// reset rec_cnt
 	t->state = TASK_RUNNING;
@@ -305,12 +287,6 @@ static void TaskStart( lpel_task_t *t)
 static void TaskStop( lpel_task_t *t)
 {
 	/* MONITORING CALLBACK */
-#ifdef USE_TASK_EVENT_LOGGING
-	if (t->mon && MON_CB(task_stop)) {
-		MON_CB(task_stop)(t->mon, t->state);
-	}
-#endif
-
 }
 
 
@@ -358,7 +334,7 @@ void LpelTaskAddStream( lpel_task_t *t, lpel_stream_desc_t *des, char mode) {
 		break;
 	}
 	head = *list;
-	stream_elem_t *new = (stream_elem_t *) malloc(sizeof(stream_elem_t));
+	stream_elem_t *new = (stream_elem_t *) SCCMallocPtr(sizeof(stream_elem_t));
 	new->stream_desc = des;
 	if (head)
 		new->next = head;
@@ -397,7 +373,7 @@ void LpelTaskRemoveStream( lpel_task_t *t, lpel_stream_desc_t *des, char mode) {
 	else
 		prev->next = head->next;
 
-	free(head);
+	SCCFreePtr(head);
 }
 
 

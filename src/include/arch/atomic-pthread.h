@@ -4,28 +4,22 @@
 
 #include <pthread.h>
 
-#ifdef HAVE_PTHREAD_SPIN_INIT
-#define ATOMIC_PTHREAD_USE_SPINLOCK
-#endif
 
-#ifdef ATOMIC_PTHREAD_USE_SPINLOCK
-#  define ATOMIC_VAR_INIT(i) { (i), 1 }
-#  define __lock_type pthread_spinlock_t
-#  define __lock_init(v) (void) pthread_spin_init( &(v)->lock, PTHREAD_PROCESS_PRIVATE)
-#  define __lock_destroy(v) (void) pthread_spin_destroy( &(v)->lock)
-#  define __lock_get(v) (void) pthread_spin_lock( &(v)->lock)
-#  define __lock_release(v) (void) pthread_spin_unlock( &(v)->lock)
-#else
-#  define ATOMIC_VAR_INIT(i) { (i), PTHREAD_MUTEX_INITIALIZER }
-#  define __lock_type pthread_mutex_t
-#  define __lock_init(v) (void) pthread_mutex_init( &(v)->lock, NULL)
-#  define __lock_destroy(v) (void) pthread_mutex_destroy( &(v)->lock)
-#  define __lock_get(v) (void) pthread_mutex_lock( &(v)->lock)
-#  define __lock_release(v) (void) pthread_mutex_unlock( &(v)->lock)
-#endif
+#define ATOMIC_VAR_INIT(i) { (i) }
+
+#define __lock_type pthread_mutex_t
+
+#define __lock_init(v) 
+
+#define __lock_destroy(v) 
+
+#define __lock_get(v) lock(10)
+
+#define __lock_release(v) unlock(10)
+
     
 #define __do_typedef(T, name) \
-typedef struct { T val; __lock_type lock; } atomic_##name
+typedef struct { T val;} atomic_##name
 
 __do_typedef(int, int);
 __do_typedef(unsigned int, uint);

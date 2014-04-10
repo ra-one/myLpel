@@ -1,74 +1,25 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
 #include <time.h>
 #include "hrc_lpel.h"
 
 #include "scc.h"
-#define malloc SCCMallocPtr
-#define free SCCFreePtr
 
-int id_counter = 100;
+#define PIPE_DEPTH 26 /* min 3*/
+#define NUM_WORKERS 13 /* including master*/
+#define MSG_TERM ((void*)-1)
+
+#ifndef NUM_MSGS
+#define NUM_MSGS 1000
+#endif
 
 typedef struct {
   lpel_stream_t *in, *out;
   int id;
 } channels_t;
-
-
-void *counter(void *arg){
-  int i,j=1;
-  if(j){
-    for(i=0;i<10;i++){printf("%d\t",i);}
-    printf("\n\n");
-    fflush(stdout);
-    j = 0;
-  }
-  return NULL;
-}
-
-
-void *Relay(void *inarg)
-{
-  lpel_task_t *t;
-  channels_t *ch = (channels_t *)inarg;
-  int term = 0;
-  int id = ch->id;
-  char *item;
-  lpel_stream_desc_t *in, *out;
-
-  in = LpelStreamOpen(ch->in, 'r');
-  out = LpelStreamOpen(ch->out, 'w');
-
-  printf("\nRelay START, read from %d, write to %d\n\n", LpelStreamGetId(in), LpelStreamGetId(out));
-
-  while (!term) {
-    item = LpelStreamRead( in);
-    assert( item != NULL );
-    //printf("Relay %d: %s", id, item );
-    if ( 0 == strcmp( item, "T\n")) {
-      term = 1;
-      //printf("relay id %d term forwarded\n",id);
-      LpelStreamWrite( out, item);
-    } else if(0 == strcmp( item, "D\n")){
-      t = LpelTaskCreate( 0, counter, NULL, 8192);
-      int *id = (int*) t + 2;
-      *id = id_counter++;
-      printf("dynamic task creat\n");
-      LpelTaskStart(t);
-      printf("dynamic task created\n");
-    } else
-      LpelStreamWrite( out, item);
-  } // end while
-  LpelStreamClose( in, 1);
-  LpelStreamClose( out, 0);
-  free(ch);
-  printf("Relay %d TERM\n", id);
-  return NULL;
-}
-
 
 static channels_t *ChannelsCreate(lpel_stream_t *in, lpel_stream_t *out, int id)
 {
@@ -79,113 +30,133 @@ static channels_t *ChannelsCreate(lpel_stream_t *in, lpel_stream_t *out, int id)
   return ch;
 }
 
+void *Source(void *inarg)
+{
+  unsigned long cnt = 0;
+  lpel_stream_desc_t *out = LpelStreamOpen((lpel_stream_t *)inarg, 'w');;
+  void *item;
+
+  while( cnt < (NUM_MSGS-1) ) {
+    item = (void*)(0x10000000 + cnt);
+    LpelStreamWrite( out, item);
+    cnt++;
+  }
+
+  item = MSG_TERM;
+  LpelStreamWrite( out, item);
+
+  LpelStreamClose( out, 0);
+  printf("Source TERM MESS %lu\n",cnt);
+  return NULL;
+}
+
+
+
+void *Sink(void *inarg)
+{
+  unsigned long cnt = 0;
+  lpel_stream_desc_t *in = LpelStreamOpen((lpel_stream_t *)inarg, 'r');;
+  void *item;
+  int term = 0;
+
+  while(!term) {
+    item = LpelStreamRead( in);
+    cnt++;
+    if (item==MSG_TERM) term = 1;
+    //SCCFreePtr( item);
+  }
+
+  LpelStreamClose( in, 1);
+  LpelStop();
+  SNETGLOBWAIT = SNETGLOBWAITVAL;
+  printf("Sink TERM MESS %lu\n",cnt);
+  return NULL;
+}
+
+
+void *Relay(void *inarg)
+{
+  lpel_task_t *t;
+  channels_t *ch = (channels_t *)inarg;
+  int term = 0;
+  void *item;
+  lpel_stream_desc_t *in, *out;
+  
+  in = LpelStreamOpen(ch->in, 'r');
+  out = LpelStreamOpen(ch->out, 'w');
+
+  while(!term) {
+    item = LpelStreamRead( in);
+    if (item==MSG_TERM) term = 1;
+    LpelStreamWrite( out, item);
+  }
+
+  LpelStreamClose( in, 1);
+  LpelStreamClose( out, 0);
+
+  SCCFreePtr(ch);
+
+  return NULL;
+}
+
 lpel_stream_t *PipeElement(lpel_stream_t *in, int depth)
 {
   lpel_stream_t *out;
   channels_t *ch;
   lpel_task_t *t;
-  int wid = depth % 2;
-  mon_task_t *mt;
 
   out = LpelStreamCreate(0);
   ch = ChannelsCreate( in, out, depth);
+  
   t = LpelTaskCreate( 0, Relay, ch, 8192);
-  //mt = LpelMonTaskCreate(LpelTaskGetId(t), NULL);
-  //LpelTaskMonitor(t, mt);
-  LpelTaskStart(t);
 
-  printf("Created Relay %d\n", depth );
+  LpelTaskStart(t);
   return (depth > 0) ? PipeElement( out, depth-1) : out;
 }
 
-
-
-static void *Outputter(void *arg)
+static void CreatePipe(void)
 {
-  lpel_stream_desc_t *in = LpelStreamOpen((lpel_stream_t*)arg, 'r'); 
-  char *item;
-  int term = 0;
+  lpel_stream_t *glob_in, *glob_out;
+  lpel_task_t *tsource, *tsink;
 
-  printf("Outputter START\n");
 
-  while (!term) {
-    item = LpelStreamRead(in);
-    assert( item != NULL );
-    //printf("Out: %s", item );
-    printf("\n\n*************************************\nOut: %s\n*************************************\n", item );
+  glob_in = LpelStreamCreate(0);
+  glob_out = PipeElement(glob_in, PIPE_DEPTH);
 
-    if ( 0 == strcmp( item, "T\n")) {
-      term = 1;
-    }
-    free( item);
-  } // end while
+  tsource = LpelTaskCreate( -1, Source, glob_in, 8192);
+  printf("\n\n*************************************\nSource Task created\n*************************************\n");
+  LpelTaskStart(tsource);
 
-  LpelStreamClose( in, 1);
-  printf("Outputter TERM\n");
-
-  LpelStop();
-  return NULL;
+  tsink = LpelTaskCreate( -1, Sink, glob_out, 8192);
+  printf("\n\n*************************************\nSink Task created\n*************************************\n");
+  LpelTaskStart(tsink);
 }
 
 
-static void *Inputter(void *arg)
-{
-  lpel_stream_desc_t *out = LpelStreamOpen((lpel_stream_t*)arg, 'w'); 
-  char *buf;
-
-  printf("Inputter START\n");
-  do {
-    buf = fgets( malloc( 120 * sizeof(char) ), 119, stdin  );
-    if(0 == strcmp(buf, "D\n") || 0 == strcmp(buf, "T\n")){
-      LpelStreamWrite( out, buf);
-    } else {
-    	LpelStreamWrite( out, strcpy( malloc(120 * sizeof(char)), buf));
-    	LpelStreamWrite( out, strcpy( malloc(120 * sizeof(char)), buf));
-    	LpelStreamWrite( out, strcpy( malloc(120 * sizeof(char)), buf));
-    	LpelStreamWrite( out, strcpy( malloc(120 * sizeof(char)), buf));
-    }
-  } while ( 0 != strcmp(buf, "T\n") );
-
-  LpelStreamClose( out, 0);
-  printf("Inputter TERM\n");
-  return NULL;
-}
 
 static void testBasic(void)
 {
-  lpel_stream_t *in, *out;
   lpel_config_t cfg;
-  lpel_task_t *intask, *outtask;
-  mon_task_t *mt;
+  memset(&cfg, 0, sizeof(lpel_config_t));
 
-  cfg.num_workers = 2; //number of cores in SCC to work as worker including master
+  cfg.num_workers = NUM_WORKERS; //number of cores in SCC to work as worker including master
   cfg.proc_workers = 2;
   cfg.proc_others = 0;
   cfg.flags = 0;
   cfg.type = HRC_LPEL;
-
-  unsigned long flags = 1 << 7 - 1;
-  //LpelMonInit(&cfg.mon, flags);
-  SCCInit(2,2,"/shared/nil/nk.host");
+  cfg.wait_window_size = 10;
+  cfg.wait_threshold = 20;
+  
+  SCCInit(cfg.num_workers,2,0,"/shared/nil/lpel.host");
   LpelInit(&cfg);
-  LpelStart(&cfg);
-  printf("\n\n*************************************\n\tcalling LpelCleanup\n*************************************\n\n");
-  if( SCCIsMaster()) {
-    in = LpelStreamCreate(0);
-    out = PipeElement(in, 2);
-    outtask = LpelTaskCreate( -1, Outputter, out, 8192);
-    //outtask = LpelTaskCreate( 0, Outputter, out, 8192);
-    LpelTaskStart(outtask);
-    printf("\n\n*************************************\nOut Task started\n*************************************\n");
 
-    intask = LpelTaskCreate( -1, Inputter, in, 8192);
-    LpelTaskStart(intask);
-    printf("\n\n*************************************\nIn Task started\n*************************************\n");
+  LpelStart(&cfg);
+  if( SCCIsMaster()) {
+    CreatePipe();
   }
   LpelCleanup();
  	printf("\n\n*************************************\n\tcalling LpelMonCleanup\n*************************************\n\n");
   SCCStop();
-  //LpelMonCleanup();
 }
 
 int main(void)
@@ -193,4 +164,5 @@ int main(void)
   testBasic();
   fprintf(stderr,"test finished\n");
   return 0;
+
 }

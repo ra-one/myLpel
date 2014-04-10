@@ -13,7 +13,7 @@
 #include "hrc_lpel.h"
 
 static entry *createEntry(void *data) {
-  entry *e = (entry *) malloc(sizeof(entry));
+  entry *e = (entry *) SCCMallocPtr(sizeof(entry));
   e->data = data;
   e->next = NULL;
   return e;
@@ -40,7 +40,7 @@ void LpelBufferInit(buffer_t *buf, unsigned int size)
  */
 void  LpelBufferCleanup(buffer_t *buf)
 {
-	 free(buf->head);
+	 SCCFreePtr(buf->head);
 }
 
 
@@ -74,7 +74,7 @@ void LpelBufferPop( buffer_t *buf)
 	    return;
 	  entry *t = buf->head;
 	  buf->head = t->next;
-	  free(t);
+	  SCCFreePtr(t);
 }
 
 
