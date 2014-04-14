@@ -290,7 +290,7 @@ void *LpelStreamRead( lpel_stream_desc_t *sd)
   /* quasi P(n_sem) */
   if ( atomic_fetch_sub( &sd->stream->n_sem, 1) == 0) {
     /* wait on stream: */
-    taskPrint(sd, self, "Read");printf("WILL BLOCK FROM READ\n");
+    //taskPrint(sd, self, "Read");printf("WILL BLOCK FROM READ\n");
     LpelTaskBlockStream( self);
   }
 
@@ -336,8 +336,8 @@ void LpelSdPrint( lpel_stream_desc_t *sd)
 void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
 {
   lpel_task_t *self = sd->task;
-  printf("LpelStreamWrite se: sd %p, task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",sd,self->uid,self->wrapper,self->state,self->worker_context,self->worker_context->wid,self->worker_context->mctx);
-  printf("LpelStreamWrite sd: sd %p, task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",sd,sd->task->uid,sd->task->wrapper,sd->task->state,sd->task->worker_context,sd->task->worker_context->wid,sd->task->worker_context->mctx);
+  ALL_DBG("LpelStreamWrite se: sd %p, task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",sd,self->uid,self->wrapper,self->state,self->worker_context,self->worker_context->wid,self->worker_context->mctx);
+  ALL_DBG("LpelStreamWrite sd: sd %p, task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",sd,sd->task->uid,sd->task->wrapper,sd->task->state,sd->task->worker_context,sd->task->worker_context->wid,sd->task->worker_context->mctx);
   streamPrint2(sd->stream,self,"write");
   int poll_wakeup = 0;
 
@@ -351,7 +351,7 @@ void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
   	if ( atomic_fetch_sub( &sd->stream->e_sem, 1)== 0) {
   		/* wait on stream: */
       //taskPrint(sd, self, "Write");
-  	  printf("WILL BLOCK FROM WRITE 1\n");
+  	  ALL_DBG("WILL BLOCK FROM WRITE 1\n");
       LpelTaskBlockStream( self);
   	}
   }
@@ -388,14 +388,14 @@ write:;
     lpel_task_t *cons = sd->stream->cons_sd->task;
     /* wakeup consumer: make ready */
     LpelTaskUnblock(cons);
-    printf("Task %d unblocked 1\n",cons->uid);
+    ALL_DBG("Task %d unblocked 1\n",cons->uid);
   } else {
     /* we are the sole producer task waking the polling consumer up */
     if (poll_wakeup) {
       lpel_task_t *cons = sd->stream->cons_sd->task;
       cons->wakeup_sd = sd->stream->cons_sd;
       LpelTaskUnblock(cons);
-      printf("Task %d unblocked 2\n",cons->uid);
+      ALL_DBG("Task %d unblocked 2\n",cons->uid);
     }
   }
  	//LpelTaskCheckYield(self);
@@ -438,7 +438,7 @@ int LpelStreamTryWrite( lpel_stream_desc_t *sd, void *item)
  */
 lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
 {
-  printf("\n******************************* starting poll\n");
+  ALL_DBG("\n******************************* starting poll\n");
   lpel_task_t *self;
   lpel_stream_iter_t *iter;
   int do_ctx_switch = 1;
@@ -458,7 +458,7 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
     if ( LpelBufferTop( &s->buffer) != NULL) {
       LpelStreamIterDestroy(iter);
       *set = sd;
-      printf("\n******************************* finished poll 1\n");
+      ALL_DBG("\n******************************* finished poll 1\n");
       return sd;
     }
   }
@@ -521,7 +521,7 @@ poll1:;
   /* context switch */
   if (do_ctx_switch) {
     /* set task as blocked */
-    taskPrint(NULL, self, "Poll");
+    //taskPrint(NULL, self, "Poll");
     LpelTaskBlockStream( self);
   }
   assert( atomic_load( &self->poll_token) == 0);
@@ -561,7 +561,7 @@ poll2:;
 
   /* 'rotate' set to stream descriptor for non-empty buffer */
   *set = self->wakeup_sd;
-  printf("\n******************************* finished poll 2\n");
+  ALL_DBG("\n******************************* finished poll 2\n");
   return self->wakeup_sd;
 }
 

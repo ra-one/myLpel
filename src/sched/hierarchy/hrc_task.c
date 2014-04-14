@@ -71,7 +71,6 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
   t->worker_context = NULL; 
   
 	t->uid = (SCCGetNodeRank()*100)+atomic_fetch_add( &taskseq, 1);  /* obtain a unique task id */
-  if(t->uid < 100) {printf("taskSize : %d\n",sizeof(lpel_task_t));}
 	t->func = func;
 	t->inarg = inarg;
 
@@ -99,8 +98,7 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 	t->sched_info.rec_limit_factor = -1;
 	t->sched_info.in_streams = NULL;
 	t->sched_info.out_streams = NULL;
-  //printf("task %p, id %d, context %p\n",t,t->uid,t->worker_context);
-  printf("task %d %p\n",t->uid,t);
+  ALL_DBG("task.c: task %p, id %d, context %p\n",t,t->uid,t->worker_context);
 	return t;
 }
 
@@ -212,15 +210,22 @@ void LpelTaskYield(void)
  */
 void LpelTaskBlockStream(lpel_task_t *t)
 {
-	//printf("LpelTaskBlockStream 1: task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",t->uid,t->wrapper,t->state,t->worker_context,t->worker_context->wid,t->worker_context->mctx);
 	/* a reference to it is held in the stream */
+  assert( t->state == TASK_RUNNING );
+  t->state = TASK_BLOCKED;
+  TaskStop( t);
+  LpelWorkerTaskBlock(t);
+  TaskStart( t);	
+  /*
+  //printf("LpelTaskBlockStream 1: task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",t->uid,t->wrapper,t->state,t->worker_context,t->worker_context->wid,t->worker_context->mctx);
+	// a reference to it is held in the stream 
 	if(!(t->wrapper)){assert( t->state == TASK_RUNNING );}
 	t->state = TASK_BLOCKED;
 	//TaskStop( t);
 	//printf("LpelTaskBlockStream 2: task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",t->uid,t->wrapper,t->state,t->worker_context,t->worker_context->wid,t->worker_context->mctx);
 	LpelWorkerTaskBlock(t);
 	TaskStart( t);		// task will be backed here when it is dispatched the next time
-
+  */
 }
 
 

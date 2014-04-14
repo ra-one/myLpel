@@ -34,7 +34,9 @@
 
 #include "scc_lpel.h"
 
-#define _USE_WORKER_DBG__
+//#define _USE_WORKER_DBG__
+
+#define MASTER_DBG printf
 
 #ifdef _USE_WORKER_DBG__
 #define WORKER_DBG printf
@@ -281,12 +283,12 @@ static void updatePriorityNeigh(taskqueue_t *tq, lpel_task_t *t) {
 
 static void MasterLoop(masterctx_t *master)
 {
-	WORKER_DBG("start master\n");
+	MASTER_DBG("start master\n");
 	do {
 		workermsg_t msg;
 
 		LpelMailboxRecv(mastermb, &msg);
-    WORKER_DBG("\n\n\nmaster: MSG received, handle it! %f\n",SCCGetTime());
+    MASTER_DBG("\n\n\nmaster: MSG received, handle it! %f\n",SCCGetTime());
 		lpel_task_t *t;
 		int wid;
 		switch(msg.type) {
@@ -296,14 +298,14 @@ static void MasterLoop(masterctx_t *master)
 			assert (t->state == TASK_CREATED);
 			t->state = TASK_READY;
       if(t->wrapper == 0){ //normal task
-        WORKER_DBG("master: got normal task %d\n", t->uid);
+        MASTER_DBG("master: got normal task %d\n", t->uid);
         if (servePendingReq(master, t) < 0) {		 // no pending request
           t->sched_info.prior = DBL_MAX; //created task does not set up input/output stream yet, set as highest priority
           t->state = TASK_INQUEUE;
           LpelTaskqueuePush(master->ready_tasks, t);
         }
       } else { //wrapper task
-        WORKER_DBG("master: got wrapper task %d\n", t->uid);
+        MASTER_DBG("master: got wrapper task %d\n", t->uid);
         if (servePendingWrap(master, t) < 0) {		 // no pending request
           t->state = TASK_INQUEUE;
           LpelTaskqueuePush(master->ready_wrappers, t);
@@ -313,23 +315,23 @@ static void MasterLoop(masterctx_t *master)
 
 		case WORKER_MSG_RETURN:
 			t = msg.body.task;
-			WORKER_DBG("master: worker returned task %d\n", t->uid);
+			MASTER_DBG("master: worker returned task %d\n", t->uid);
 			switch(t->state) {
 			case TASK_BLOCKED:
 				if (t->wakenup == 1) {	/* task has been waked up */
-          WORKER_DBG("task %d was put in ready que\n",t->uid);
+          MASTER_DBG("task %d was put in ready que\n",t->uid);
 					t->wakenup = 0;
 					t->state = TASK_READY;
 					// no break, task will be treated as if it is returned as ready
 				} else {
-          WORKER_DBG("task %d state was changed to returned\n",t->uid);
+          MASTER_DBG("task %d state was changed to returned\n",t->uid);
 					t->state = TASK_RETURNED;
 					updatePriorityNeigh(master->ready_tasks, t);
 					break;
 				}
 
 			case TASK_READY:	// task yields
-      WORKER_DBG("master: task %d added to ready que\n",t->uid);
+      MASTER_DBG("master: task %d added to ready que\n",t->uid);
 #ifdef _USE_NEG_DEMAND_LIMIT_
 				t->sched_info.prior = LpelTaskCalPriority(t);
 				if (t->sched_info.prior == LPEL_DBL_MIN) {		// if not schedule task if it has too low priority
@@ -347,7 +349,7 @@ static void MasterLoop(masterctx_t *master)
 				break;
 
 			case TASK_ZOMBIE:
-        WORKER_DBG("master: zombie task\n");
+        MASTER_DBG("master: zombie task\n");
 				updatePriorityNeigh(master->ready_tasks, t);
 				LpelTaskDestroy(t);
 				break;
@@ -360,11 +362,11 @@ static void MasterLoop(masterctx_t *master)
 		case WORKER_MSG_WAKEUP:
 			t = msg.body.task;
 			if (t->state != TASK_RETURNED) {		// task has not been returned yet
-        WORKER_DBG("master: put message back, task %d not returned yet\n",t->uid);
+        MASTER_DBG("master: put message back, task %d not returned yet\n",t->uid);
 				t->wakenup = 1;		// set task as wakenup so that when returned it will be treated as ready
 				break;
 			}
-			WORKER_DBG("master: unblock task %d\n", t->uid);
+			MASTER_DBG("master: unblock task %d\n", t->uid);
 			t->state = TASK_READY;
 
 #ifdef _USE_NEG_DEMAND_LIMIT_
@@ -389,24 +391,24 @@ static void MasterLoop(masterctx_t *master)
 		case WORKER_MSG_REQUEST:
 			wid = msg.body.from_worker; 
       if (wid < 0){
-        WORKER_DBG("master: task request from wrapper %d\n", wid);
+        MASTER_DBG("master: task request from wrapper %d\n", wid);
         wid *= -1;
         t = LpelTaskqueuePeek(master->ready_wrappers);
         if (t == NULL) {
           master->waitwrappers[wid-(num_workers+1)] = 1;
-          WORKER_DBG("master: wrapper %d put into wait wrapper que\n", wid);
+          MASTER_DBG("master: wrapper %d put into wait wrapper que\n", wid);
         } else {
           t->state = TASK_READY;
-          WORKER_DBG("master: task %d sent to wrapper %d\n",t->uid, wid);
+          MASTER_DBG("master: task %d sent to wrapper %d\n",t->uid, wid);
           sendTask(wid, t);
           t = LpelTaskqueuePop(master->ready_wrappers);
         }
       } else {
-        WORKER_DBG("master: task request from worker %d\n", wid);
+        MASTER_DBG("master: task request from worker %d\n", wid);
         t = LpelTaskqueuePeek(master->ready_tasks);
         if (t == NULL) {
           addWait(master, wid);
-          WORKER_DBG("master: worker %d put into wait worker que\n", wid);
+          MASTER_DBG("master: worker %d put into wait worker que\n", wid);
         } else {
 
 #ifdef _USE_NEG_DEMAND_LIMIT_
@@ -416,7 +418,7 @@ static void MasterLoop(masterctx_t *master)
           }
 #endif
           t->state = TASK_READY;
-          WORKER_DBG("master: task %d sent to worker %d\n",t->uid, wid);
+          MASTER_DBG("master: task %d sent to worker %d\n",t->uid, wid);
           sendTask(wid, t);
           t = LpelTaskqueuePop(master->ready_tasks);
         }
@@ -424,7 +426,7 @@ static void MasterLoop(masterctx_t *master)
 			break;
 
 		case WORKER_MSG_TERMINATE:
-      WORKER_DBG("master: Termination message\n");
+      MASTER_DBG("master: Termination message\n");
 			master->terminate = 1;
 			break;
  
@@ -436,8 +438,7 @@ static void MasterLoop(masterctx_t *master)
 		default:
 			assert(0);
 		}
-    WORKER_DBG("master->terminate %d, TaskqueueSize %d, WrapperqueueSize %d\n\n",master->terminate, LpelTaskqueueSize(master->ready_tasks),LpelTaskqueueSize(master->ready_wrappers));
-    fprintf(stderr,"TaskqueueSize %d, WrapperqueueSize %d\n\n",LpelTaskqueueSize(master->ready_tasks),LpelTaskqueueSize(master->ready_wrappers));
+    MASTER_DBG("TaskqueueSize %d, WrapperqueueSize %d\n\n",LpelTaskqueueSize(master->ready_tasks),LpelTaskqueueSize(master->ready_wrappers));
 	} while (!(master->terminate && LpelTaskqueueSize(master->ready_tasks) == 0));
 }
 
@@ -500,11 +501,9 @@ static void WrapperLoop(workerctx_t *wp)
 		t = wp->current_task;
 		if (t != NULL) {
 			/* execute task */
-			//WORKER_DBG("wrapper: switch to task %d wp %p, t %p\n", t->uid,&wp->mctx,&t->mctx);
-			fprintf(stderr,"wrapper: switch to task %d tctx %p from wctx %p\n", t->uid,&t->mctx,&wp->mctx);
+			WORKER_DBG(stderr,"wrapper: switch to task %d tctx %p from wctx %p\n", t->uid,&t->mctx,&wp->mctx);
 			assert(t->worker_context == wp);
-      printf("wrapper: mailbox %p\n", wp->mailbox);
-			mctx_switch(&wp->mctx, &t->mctx);
+      mctx_switch(&wp->mctx, &t->mctx);
 		} else {
 FirstTask:
 			/* no ready tasks */
@@ -556,10 +555,7 @@ void *WrapperThread(void *arg)
 #endif
   wp->terminate = 0;
 	LpelThreadAssign(wp->wid);
-  char *tmp = wp->mailbox;
-  printf("************************mailbox befor %p, after %p\n",tmp,wp->mailbox);
-	WrapperLoop(wp);
-  printf("************************mailbox befor %p, after %p\n",tmp,wp->mailbox);
+  WrapperLoop(wp);
   WORKER_DBG("wrapper: All done wait for SNETGLOBWAIT\n");
   //while(SNETGLOBWAIT != SNETGLOBWAITVAL);
 
@@ -611,7 +607,6 @@ static void WorkerLoop(workerctx_t *wc)
   	  case WORKER_MSG_ASSIGN:
   	  	t = msg.body.task;
   	  	WORKER_DBG("worker %d: got task %d, isWrapper: %d\n", wc->wid, t->uid,t->wrapper);
-        printf("worker %d: got task %d, isWrapper: %d\n", wc->wid, t->uid,t->wrapper);
         assert(t->state == TASK_READY);
   	  	t->worker_context = wc;
   	  	wc->current_task = t;
@@ -705,30 +700,23 @@ void LpelWorkerTaskExit(lpel_task_t *t) {
 	} else {
 		wc->terminate = 1;		// wrapper: terminate
   }
-  printf("worker %d: task %d exit wc->ter %d\n", wc->wid, t->uid, wc->terminate);
+  ALL_DBG("worker_op.c: worker %d, task %d exit, wc->ter %d\n", wc->wid, t->uid, wc->terminate);
   mctx_switch(&t->mctx, &wc->mctx);		// switch back to the worker
 }
 
 
 void LpelWorkerTaskBlock(lpel_task_t *t){
-	//printf("LpelWorkerTaskBlock: task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",t->uid,t->wrapper,t->state,t->worker_context,t->worker_context->wid,t->worker_context->mctx);
 	workerctx_t *wc = t->worker_context;
-	/*
+
 	if (wc->wid < 0) {	//wrapper
 			wc->current_task = NULL;
 	} else {
 		WORKER_DBG("worker %d: block task %d\n", wc->wid, t->uid);
 		//sendUpdatePrior(t);		//update prior for neighbor
 		requestTask(wc);
-	}*/
-
-	if(wc->wid > -1 && wc->wid < 48){
-		WORKER_DBG("worker %d: block task %d\n", wc->wid, t->uid);
-		//sendUpdatePrior(t);		//update prior for neighbor
-		requestTask(wc);
 	}
 	wc->current_task = NULL;
-	printf("TaskBlock: switch ");
+	ALL_DBG("worker_op.c: TaskBlock switch ");
 	mctx_switch(&t->mctx, &wc->mctx);		// switch back to the worker/wrapper
 }
 
@@ -747,18 +735,17 @@ void LpelWorkerTaskYield(lpel_task_t *t){
 
 void LpelWorkerTaskWakeup(lpel_task_t *t) {
 	workerctx_t *wc = t->worker_context;
-	//WORKER_DBG("worker %d: send wake up task %d\n", LpelWorkerSelf()->wid, t->uid);
-	//printf("*************************** worker %d: send wake up task %d\n", LpelWorkerSelf()->wid, t->uid);
+	WORKER_DBG("worker %d: send wake up task %d\n", LpelWorkerSelf()->wid, t->uid);
 	if (wc == NULL){
 		sendWakeup(mastermb, t);
-    printf("worker %d: send wake up to task %d via masterMB\n", LpelWorkerSelf()->wid, t->uid);
+    ALL_DBG("worker %d: send wake up to task %d via masterMB\n", LpelWorkerSelf()->wid, t->uid);
 	} else {
 		if (wc->wid < 0) {
       sendWakeup(wc->mailbox, t);
-      printf("worker %d: send wake up to task %d at mailbox %p\n", LpelWorkerSelf()->wid, t->uid, wc->mailbox);
+      ALL_DBG("worker %d: send wake up to task %d at mailbox %p\n", LpelWorkerSelf()->wid, t->uid, wc->mailbox);
 		} else {
       sendWakeup(mastermb, t);
-      printf("worker %d: send wake up to task %d via masterMB\n", LpelWorkerSelf()->wid, t->uid);
+      ALL_DBG("worker %d: send wake up to task %d via masterMB\n", LpelWorkerSelf()->wid, t->uid);
     }
 	}
 }

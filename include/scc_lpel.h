@@ -3,6 +3,7 @@
 
 #ifdef USE_SCC
 #include "scc.h"
+#include "/shared/nil/snetInstall/include/debugging.h"
 //#define malloc SCCMallocPtr
 //#define valloc SCCMallocPtr
 //#define free SCCFreePtr

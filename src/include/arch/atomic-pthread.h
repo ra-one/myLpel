@@ -13,9 +13,9 @@
 
 #define __lock_destroy(v) 
 
-#define __lock_get(v) lock(10)
+#define __lock_get(v) lock(17)
 
-#define __lock_release(v) unlock(10)
+#define __lock_release(v) unlock(17)
 
     
 #define __do_typedef(T, name) \

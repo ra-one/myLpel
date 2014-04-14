@@ -85,10 +85,10 @@ void LpelTaskqueuePush( taskqueue_t *tq, lpel_task_t *t){
    
   //allocate more memory if needed
   if (tq->count >= tq->alloc) {
-    printf("********************************************* in REALLOC before tq->heap %p\n",tq->heap);
+    ALL_DBG("********************************************* in REALLOC before tq->heap %p\n",tq->heap);
     tq->alloc = tq->alloc + BLOCKSIZE;
     tq->heap = realloc(tq->heap, tq->alloc *sizeof(taskqueue_t*));
-    printf("********************************************* in REALLOC after tq->heap %p\n\n",tq->heap);
+    ALL_DBG("********************************************* in REALLOC after tq->heap %p\n\n",tq->heap);
   }
 
   tq->heap[tq->count] = t;
