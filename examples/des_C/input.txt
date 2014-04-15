@@ -1,0 +1,15 @@
+num_workers=6
+num_wrappers=2
+enable_dvfs=0
+wait_window_size=5
+wait_threshold=90
+host_file=/shared/nil/i1.host
+no_mess=50
+mess_size=16
+num_pipeline=1
+sleep_micro=1500
+change_mess=30
+chane_percent=50
+window_size=5
+thresh_hold=90
+skip_update=10
