@@ -6,7 +6,6 @@
 #include "hrc_lpel.h"
 #include "scc.h"
 
-
 extern uintptr_t  addr;
 extern uintptr_t *allMbox;
 extern int num_mailboxes;
