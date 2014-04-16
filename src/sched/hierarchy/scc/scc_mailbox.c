@@ -6,11 +6,7 @@
 #include "hrc_lpel.h"
 #include "scc.h"
 
-extern uintptr_t  addr;
 extern uintptr_t *allMbox;
-extern int num_mailboxes;
-static int node_ID;
-static int size;
 pthread_mutexattr_t attr;
 
 /* Utility functions*/
@@ -33,24 +29,17 @@ struct mailbox_t {
   int                 mbox_ID;
 };
 
-
-
 //#define _USE_MBX_DBG__
 
 #ifdef _USE_MBX_DBG__
 #define MAILBOX_DBG_LOCK printf
 #define MAILBOX_DBG	//
+#define MAILBOX_DBG_LIST
 #else
 #define MAILBOX_DBG_LOCK //
 #define MAILBOX_DBG	//
 #endif
 
-//#define MAILBOX_DBG_LIST
-
-#define DCMflush(); //
-
-// 0 false, 1 true
-#define USE_TSR 0 
 /******************************************************************************/
 /* Free node pool management functions                                        */
 /******************************************************************************/
@@ -104,7 +93,6 @@ mailbox_t *LpelMailboxCreate(void)
 
 void LpelMailboxDestroy( mailbox_t *mbox)
 {
-  return;
   if (mbox == NULL || mbox->list_inbox != NULL ) return;
   mailbox_node_t *node;
 
@@ -155,19 +143,11 @@ void printListInbox(char* c, mailbox_t *mbox){
 
 void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
 {
-
-  if(USE_TSR){
-    lock((mbox->mbox_ID)+20);
-  } else {
-    int value=-1;
-    while(value != 0){
-      atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
-    }
+  int value=-1;
+  while(value != 0){
+    atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
   }
 
-  //while(pthread_mutex_trylock(&mbox->lock_inbox) != 0);
-  //pthread_mutex_lock(&mbox->lock_inbox);
-  
   MAILBOX_DBG_LOCK("Mailbox send: locked %d at %f\n",mbox->mbox_ID,SCCGetTime());
     
   /* get a free node from recepient */
@@ -189,13 +169,7 @@ void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
   printListInbox("Send aftr",mbox);
   MAILBOX_DBG_LOCK("Mailbox send: unlocked %d at %f\n\n",mbox->mbox_ID,SCCGetTime());
   
-  if(USE_TSR){
-    unlock((mbox->mbox_ID)+20);
-  } else {
-    atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
-  }
-
-  //pthread_mutex_unlock(&mbox->lock_inbox);
+  atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
 }
 
 
@@ -206,27 +180,15 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
 
   while(go_on==false){
     if(mbox->list_inbox != NULL){
-      if(USE_TSR){
-        lock((mbox->mbox_ID)+20);
-      } else {
-        int value=-1;
-      	while(value != 0){
-  		    atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
-        }
-      }      	
+      int value=-1;
+      while(value != 0){
+        atomic_incR(&atomic_inc_regs[mbox->mbox_ID],&value);
+      }     	
       MAILBOX_DBG_LOCK("Mailbox recv: locked %d at %f\n",mbox->mbox_ID,SCCGetTime());
       go_on=true;
     }
   }
-/*
-  while(go_on==false){
-    if(mbox->list_inbox != NULL){
-      //while(pthread_mutex_trylock(&mbox->lock_inbox) != 0);	
-      MAILBOX_DBG_LOCK("Mailbox recv: locked %d at %f\n",mbox->mbox_ID,SCCGetTime());
-      go_on=true;
-    }
-  }
-*/
+
   assert( mbox->list_inbox != NULL);
   printListInbox("Recv bfor",mbox);
 
@@ -244,12 +206,6 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
   PutFree( mbox, node);
   printListInbox("Recv aftr",mbox);
   MAILBOX_DBG_LOCK("Mailbox recv: unlocked %d at %f\n\n",mbox->mbox_ID,SCCGetTime());
-
-  if(USE_TSR){
-    unlock((mbox->mbox_ID)+20);
-  } else {
-    atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
-  }
-
-  //pthread_mutex_unlock(&mbox->lock_inbox);
+  
+  atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
 }
