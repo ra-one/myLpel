@@ -13,7 +13,7 @@
 #include "scc.h"
 
 static atomic_int taskseq = ATOMIC_VAR_INIT(0);
-
+ 
 static int neg_demand_lim = 0;
 
 static double (*prior_cal) (int in, int out) = priorfunc14;
