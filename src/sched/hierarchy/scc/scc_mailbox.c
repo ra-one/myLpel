@@ -40,6 +40,8 @@ struct mailbox_t {
 #define MAILBOX_DBG	//
 #endif
 
+void printListInbox(char* c, mailbox_t *mbox);
+
 /******************************************************************************/
 /* Free node pool management functions                                        */
 /******************************************************************************/
@@ -116,31 +118,6 @@ void LpelMailboxDestroy( mailbox_t *mbox)
   pthread_mutexattr_destroy(&attr);
 }
 
-/**
- * @return 1 if there is an incoming msg, 0 otherwise
- * @note: does not need to be locked as a 'missed' msg
- *        will be eventually fetched in the next worker loop
- */
-int LpelMailboxHasIncoming( mailbox_t *mbox)
-{
-  return ( mbox->list_inbox != NULL);
-}
-
-void printListInbox(char* c, mailbox_t *mbox){
-#ifdef MAILBOX_DBG_LIST
-  mailbox_node_t *node;
-  printf("%s at %f: mbox %p, id %d , mbox->list_inbox = ",c,SCCGetTime(),mbox,mbox->mbox_ID);
-  if(mbox->list_inbox != NULL){
-    node =  mbox->list_inbox;
-    do{
-    printf("%p-> ",node);
-    node = node->next;
-    } while(node != NULL);
-  }
-  printf("NULL\n");
-#endif //MAILBOX_DBG_LIST
-}
-
 void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
 {
   int value=-1;
@@ -208,4 +185,29 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
   MAILBOX_DBG_LOCK("Mailbox recv: unlocked %d at %f\n\n",mbox->mbox_ID,SCCGetTime());
   
   atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
+}
+
+/**
+ * @return 1 if there is an incoming msg, 0 otherwise
+ * @note: does not need to be locked as a 'missed' msg
+ *        will be eventually fetched in the next worker loop
+ */
+int LpelMailboxHasIncoming( mailbox_t *mbox)
+{
+  return ( mbox->list_inbox != NULL);
+}
+
+void printListInbox(char* c, mailbox_t *mbox){
+#ifdef MAILBOX_DBG_LIST
+  mailbox_node_t *node;
+  printf("%s at %f: mbox %p, id %d , mbox->list_inbox = ",c,SCCGetTime(),mbox,mbox->mbox_ID);
+  if(mbox->list_inbox != NULL){
+    node =  mbox->list_inbox;
+    do{
+    printf("%p-> ",node);
+    node = node->next;
+    } while(node != NULL);
+  }
+  printf("NULL\n");
+#endif
 }

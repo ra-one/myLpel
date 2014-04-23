@@ -1,45 +1,14 @@
-
-
 #include <unistd.h>
-
-
 #include <lpel/timing.h>
 
 
-
-#if defined(HAVE_POSIX_TIMERS) && _POSIX_TIMERS > 0
-
-#if defined(_POSIX_MONOTONIC_CLOCK)
-#  define TIMING_CLOCK  CLOCK_MONOTONIC
-#else
-#  define TIMING_CLOCK  CLOCK_REALTIME
-#endif
-
 /**
  * Current timestamp
  * @param t   pointer to lpel_timing_t
  */
 #define TIMESTAMP(t) do { \
-    (void) clock_gettime(CLOCK_REALTIME, (t)); \
+    (void) SCCGetTimeAll(t); \
 } while (0)
-
-#else  /* defined(HAVE_POSIX_TIMERS) && _POSIX_TIMERS > 0 */
-
-
-#include <sys/time.h>
-
-/**
- * Current timestamp
- * @param t   pointer to lpel_timing_t
- */
-#define TIMESTAMP(t) do { \
-  struct timeval tv; \
-  gettimeofday(&tv, NULL); \
-  (t)->tv_sec  = tv.tv_sec; \
-  (t)->tv_nsec = tv.tv_usec*1000; \
-} while (0)
-
-#endif /* defined(HAVE_POSIX_TIMERS) && _POSIX_TIMERS > 0 */
 
 
 #define TIMING_BILLION 1000000000L

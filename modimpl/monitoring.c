@@ -9,7 +9,6 @@
 
 #include "monitoring.h"
 
-
 #define PrintTiming(t, file)  PrintTimingNs((t),(file))
 #define PrintNormTS(t, file)  PrintNormTSns((t),(file))
 
@@ -37,6 +36,7 @@ typedef struct mon_usrevt_t mon_usrevt_t;
  * Every worker has a monitoring context, which besides
  * the log-file handle contains wait-times (idle-time)
  */
+ 
 struct mon_worker_t {
 	int           wid;         /** worker id */
 	FILE         *outfile;     /** where to write the monitoring data to */
@@ -135,9 +135,7 @@ struct mon_usrevt_t {
  * Reference timestamp
  */
 static lpel_timing_t monitoring_begin = LPEL_TIMING_INITIALIZER;
-
-
-
+//static lpel_timing_t monitoring_begin;
 
 
 /*****************************************************************************
@@ -155,10 +153,12 @@ static lpel_timing_t monitoring_begin = LPEL_TIMING_INITIALIZER;
 #define FLAG_LOAD(mt)	(mt->flags & LPEL_MON_LOAD)
 
 /**
- * Print a time in usec
+ * Print a time in usec (microseconds)
  */
 static inline void PrintTimingUs( const lpel_timing_t *t, FILE *file)
 {
+
+  
   if (t->tv_sec == 0) {
     (void) fprintf( file, "%lu ", t->tv_nsec / 1000);
   } else {
@@ -170,7 +170,7 @@ static inline void PrintTimingUs( const lpel_timing_t *t, FILE *file)
 }
 
 /**
- * Print a time in nsec
+ * Print a time in nsec (nanoseconds)
  */
 static inline void PrintTimingNs( const lpel_timing_t *t, FILE *file)
 {
@@ -288,7 +288,7 @@ static void PrintDirtyList(mon_task_t *mt)
 
 		case ST_CLOSED:
 			/* eventually free the mon_stream_t of the closed stream */
-			free(ms);
+			SCCFreePtr(ms);
 			break;
 
 		default: assert(0);
@@ -331,8 +331,6 @@ static mon_worker_t *MonCbWorkerCreate( int wid)
 	mon->flags = mon_flags;
 
 	mon->wid = wid;
-
-
 
 	/* build filename */
 	memset(fname, 0, MON_FNAME_MAXLEN+1);
@@ -512,7 +510,7 @@ static void MonCbWorkerWaitStop(mon_worker_t *mon)
 static void MonCbTaskDestroy(mon_task_t *mt)
 {
 	assert( mt != NULL );
-	free(mt);
+	SCCFreePtr(mt);
 }
 
 
@@ -530,7 +528,7 @@ static void MonCbTaskAssign(mon_task_t *mt, mon_worker_t *mw)
 
 mon_task_t *LpelMonTaskCreate(unsigned long tid, const char *name)
 {
-	mon_task_t *mt = malloc( sizeof(mon_task_t) );
+	mon_task_t *mt = SCCMallocPtr( sizeof(mon_task_t) );
 
 	/* zero out everything */
 	memset(mt, 0, sizeof(mon_task_t));
@@ -630,7 +628,7 @@ static mon_stream_t *MonCbStreamOpen(mon_task_t *mt, unsigned int sid, char mode
 {
 	if (!mt || !(FLAG_STREAMS(mt) | FLAG_TASK(mt))) return NULL;
 
-	mon_stream_t *ms = malloc(sizeof(mon_stream_t));
+	mon_stream_t *ms = SCCMallocPtr(sizeof(mon_stream_t));
 	ms->sid = sid;
 	ms->montask = mt;
 	ms->mode = mode;

@@ -22,42 +22,7 @@
 #define STREAM_DBG	//
 #endif
 
-#define STRM_LOCK_DBG(x) fprintf(stderr,x)
-
 static atomic_int stream_seq = ATOMIC_VAR_INIT(0);
-
-// print stream info for debug
-void streamPrint (lpel_stream_t *s, char *p){}
-void streamPrint2(lpel_stream_t *s,lpel_task_t *t, char *p){}
-void streamPrint21(lpel_stream_t *s,lpel_task_t *t, char *p){
-  if(s->uid < 100){
-    if(t != NULL) fprintf(stderr,"task: %d %p, stream id: %d %p %s\n",t->uid,t,s->uid,s,p);
-    else fprintf(stderr,"stream id: %d %p %s\n",s->uid,s,p);
-  }
-}
-
-void streamPrint1(lpel_stream_t *s, char *p){
-  printf("stream id: %d %p, prodlock addr: %p, from %s\n",s->uid,s,&s->prod_lock,p);
-}
-
-void taskPrint(lpel_stream_desc_t *sd, lpel_task_t *slf, char *p){
-  if(sd == NULL){
-    printf("from: %s sd=NULL\n task %p %d, t->wrapper %d,state :%c:\n\n\n",p,slf,slf->uid,slf->wrapper,slf->state);
-  } else {
-    printf("from: %s\ntask %p %d, t->wrapper %d,state :%c:\ntask %p %d, t->wrapper %d,state :%c:\n\n\
-    \n",p,sd->task,sd->task->uid,sd->task->wrapper,sd->task->state,slf,slf->uid,slf->wrapper,slf->state);
-  }
-}
-
-char* getStreamType(lpel_stream_type type){
-  char *retval;
-  if(type == LPEL_STREAM_ENTRY)       retval = "LPEL_STREAM_ENTRY";
-  else if(type == LPEL_STREAM_EXIT)   retval = "LPEL_STREAM_EXIT";
-  else if(type == LPEL_STREAM_MIDDLE) retval = "LPEL_STREAM_MIDDLE";
-  else                                retval = "STREAM TYPE UNKNOWN";
-  
-  return retval;       
-}
 
 /**
  * Create a stream
@@ -72,9 +37,11 @@ lpel_stream_t *LpelStreamCreate(int size)
   if (0==size) size = STREAM_BUFFER_SIZE;
 
   lpel_stream_t *s;
-
-  s = (lpel_stream_t *) SCCMallocPtr( sizeof(lpel_stream_t) );
-  LpelBufferInit( &s->buffer, size);
+  s = LpelWorkerGetStream();		// try to get from the free list first
+  if (s == NULL) {
+    s = (lpel_stream_t *) SCCMallocPtr( sizeof(lpel_stream_t) );
+    LpelBufferInit( &s->buffer, size);
+  }
   
   assert(LpelBufferIsEmpty(&s->buffer));
 
@@ -85,7 +52,6 @@ lpel_stream_t *LpelStreamCreate(int size)
   pthread_mutex_init(&s->prod_lock,&attr);
   pthread_mutexattr_destroy(&attr);
   
-  streamPrint(s,"init");
   atomic_init( &s->n_sem, 0);
   atomic_init( &s->e_sem, size);
   s->is_poll = 0;
@@ -110,7 +76,6 @@ lpel_stream_t *LpelStreamCreate(int size)
  */
 void LpelStreamDestroy( lpel_stream_t *s)
 {
-  streamPrint(s,"destroy");
   pthread_mutex_destroy(&s->prod_lock);
   atomic_destroy( &s->n_sem);
   atomic_destroy( &s->e_sem);
@@ -153,14 +118,27 @@ lpel_stream_desc_t *LpelStreamOpen( lpel_stream_t *s, char mode)
   lpel_task_t *ct = LpelTaskSelf();
 
   assert( mode == 'r' || mode == 'w' );
-
-  sd = (lpel_stream_desc_t *) SCCMallocPtr( sizeof( lpel_stream_desc_t));
+  sd = LpelWorkerGetSd(ct->worker_context);
+  if (sd == NULL) sd = (lpel_stream_desc_t *) SCCMallocPtr( sizeof( lpel_stream_desc_t));
   sd->task = ct;
   sd->stream = s;
   sd->mode = mode;
   sd->next  = NULL;
 
   sd->mon = NULL;
+
+#ifdef USE_TASK_EVENT_LOGGING
+  /* create monitoring object, or NULL if stream
+   * is not going to be monitored (depends on ct->mon)
+   */
+  if (ct->mon && MON_CB(stream_open)) {
+    sd->mon = MON_CB(stream_open)( ct->mon, s->uid, mode);
+  } else {
+    sd->mon = NULL;
+  }
+#else
+  sd->mon = NULL;
+#endif
 
   switch(mode) {
     case 'r': s->cons_sd = sd; break;
@@ -171,10 +149,8 @@ lpel_stream_desc_t *LpelStreamOpen( lpel_stream_t *s, char mode)
   if (LpelTaskIsWrapper(ct))
   	s->type = (mode == 'r' ? LPEL_STREAM_EXIT : LPEL_STREAM_ENTRY);
   
-  //if(s->uid < 100)fprintf(stderr,"task %d opened stream %d mode %c as %d %s\n", ct->uid,s->uid,mode,s->type,getStreamType(s->type));
   STREAM_DBG("task %d open stream %d, mode %c\n", ct->uid, s->uid, mode);
   LpelTaskAddStream(ct, sd, mode);
-  streamPrint2(s,NULL,"open");
   return sd;
 }
 
@@ -186,7 +162,12 @@ lpel_stream_desc_t *LpelStreamOpen( lpel_stream_t *s, char mode)
  */
 void LpelStreamClose( lpel_stream_desc_t *sd, int destroy_s)
 {
-  streamPrint2(sd->stream,sd->task,"close");
+  /* MONITORING CALLBACK */
+#ifdef USE_TASK_EVENT_LOGGING
+  if (sd->mon && MON_CB(stream_close)) {
+    MON_CB(stream_close)(sd->mon);
+  }
+#endif
 
   STREAM_DBG("task %d closes stream %d, mode %c\n", sd->task->uid, sd->stream->uid, sd->mode);
   workerctx_t *wc = sd->task->worker_context;
@@ -238,8 +219,13 @@ void LpelStreamReplace( lpel_stream_desc_t *sd, lpel_stream_t *snew)
   old_cons->stream = NULL;			// unset the stream pointer of the old consumer
   snew->cons_sd = sd;
   sd->stream = snew;
-  
-  fprintf(stderr,"\n\n\n\n\t*********************************************************************\n");
+
+  /* MONITORING CALLBACK */
+#ifdef USE_TASK_EVENT_LOGGING
+  if (sd->mon && MON_CB(stream_replace)) {
+    MON_CB(stream_replace)(sd->mon, snew->uid);
+  }
+#endif
 }
 
 
@@ -283,14 +269,24 @@ void *LpelStreamRead( lpel_stream_desc_t *sd)
 {
   void *item;
   lpel_task_t *self = sd->task;
-  if (sd->mode != 'r' ) sd->mode = 'r';
   assert( sd->mode == 'r');
-  streamPrint2(sd->stream,self,"read");
+
+  /* MONITORING CALLBACK */
+#ifdef USE_TASK_EVENT_LOGGING
+  if (sd->mon && MON_CB(stream_readprepare)) {
+    MON_CB(stream_readprepare)(sd->mon);
+  }
+#endif
   
   /* quasi P(n_sem) */
   if ( atomic_fetch_sub( &sd->stream->n_sem, 1) == 0) {
+#ifdef USE_TASK_EVENT_LOGGING
+    /* MONITORING CALLBACK */
+    if (sd->mon && MON_CB(stream_blockon)) {
+      MON_CB(stream_blockon)(sd->mon);
+    }
+#endif
     /* wait on stream: */
-    //taskPrint(sd, self, "Read");printf("WILL BLOCK FROM READ\n");
     LpelTaskBlockStream( self);
   }
 
@@ -311,8 +307,20 @@ void *LpelStreamRead( lpel_stream_desc_t *sd)
   		lpel_task_t *prod = sd->stream->prod_sd->task;
   		/* wakeup producer: make ready */
   		LpelTaskUnblock(prod);
+  		/* MONITORING CALLBACK */
+#ifdef USE_TASK_EVENT_LOGGING
+  		if (sd->mon && MON_CB(stream_wakeup)) {
+  			MON_CB(stream_wakeup)(sd->mon);
+  		}
+#endif	/** USE_TASK_EVENT_LOGGING */
   	}
   }
+  /* MONITORING CALLBACK */
+#ifdef USE_TASK_EVENT_LOGGING
+  if (sd->mon && MON_CB(stream_readfinish)) {
+    MON_CB(stream_readfinish)(sd->mon, item);
+  }
+#endif
   return item;
 }
 
@@ -329,44 +337,39 @@ void *LpelStreamRead( lpel_stream_desc_t *sd)
  * @pre         current task is single writer
  * @pre         item != NULL
  */
-void LpelSdPrint( lpel_stream_desc_t *sd)
-{
-  printf("LpelSdPrint: sd %p, task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",sd,sd->task->uid,sd->task->wrapper,sd->task->state,sd->task->worker_context,sd->task->worker_context->wid,sd->task->worker_context->mctx);
-}
 void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
 {
   lpel_task_t *self = sd->task;
-  ALL_DBG("LpelStreamWrite se: sd %p, task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",sd,self->uid,self->wrapper,self->state,self->worker_context,self->worker_context->wid,self->worker_context->mctx);
-  ALL_DBG("LpelStreamWrite sd: sd %p, task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",sd,sd->task->uid,sd->task->wrapper,sd->task->state,sd->task->worker_context,sd->task->worker_context->wid,sd->task->worker_context->mctx);
-  streamPrint2(sd->stream,self,"write");
   int poll_wakeup = 0;
 
   /* check if opened for writing */
-  if (item == NULL ) while(item == NULL );
+  assert( sd->mode == 'w' );
   assert( item != NULL );
+  /* MONITORING CALLBACK */
+#ifdef USE_TASK_EVENT_LOGGING
+  if (sd->mon && MON_CB(stream_writeprepare)) {
+    MON_CB(stream_writeprepare)(sd->mon, item);
+  }
+#endif
 
   /* only entry stream is bounded */
   if (sd->stream->type == LPEL_STREAM_ENTRY) {
   	/* quasi P(e_sem) */
   	if ( atomic_fetch_sub( &sd->stream->e_sem, 1)== 0) {
+      /* MONITORING CALLBACK */
+#ifdef USE_TASK_EVENT_LOGGING
+      if (sd->mon && MON_CB(stream_blockon)) {
+        MON_CB(stream_blockon)(sd->mon);
+      }
+#endif /** USE_TASK_EVENT_LOGGING */
   		/* wait on stream: */
-      //taskPrint(sd, self, "Write");
   	  ALL_DBG("WILL BLOCK FROM WRITE 1\n");
       LpelTaskBlockStream( self);
   	}
   }
 
   /* writing to the buffer and checking if consumer polls must be atomic */
-  streamPrint(sd->stream,"going to lock in write");
-write:;
-  int count = 0;
-  do{
-    if(count++ > 1000){ 
-      pthread_mutex_unlock(&sd->stream->prod_lock);
-      usleep(sd->stream->uid); 
-      goto write;
-    }    
-  } while(pthread_mutex_trylock(&sd->stream->prod_lock) != 0);
+  while(pthread_mutex_trylock(&sd->stream->prod_lock) != 0);
   {
     /* there must be space now in buffer */
     assert( LpelBufferIsSpace( &sd->stream->buffer) );
@@ -379,7 +382,6 @@ write:;
       sd->stream->is_poll = 0;
     }
   }
-  streamPrint(sd->stream,"going to unlock in write");
   pthread_mutex_unlock(&sd->stream->prod_lock);
 
   /* quasi V(n_sem) */
@@ -389,6 +391,12 @@ write:;
     /* wakeup consumer: make ready */
     LpelTaskUnblock(cons);
     ALL_DBG("Task %d unblocked 1\n",cons->uid);
+    /* MONITORING CALLBACK */
+#ifdef USE_TASK_EVENT_LOGGING
+    if (sd->mon && MON_CB(stream_wakeup)) {
+      MON_CB(stream_wakeup)(sd->mon);
+    }
+#endif /** USE_TASK_EVENT_LOGGING */
   } else {
     /* we are the sole producer task waking the polling consumer up */
     if (poll_wakeup) {
@@ -396,12 +404,27 @@ write:;
       cons->wakeup_sd = sd->stream->cons_sd;
       LpelTaskUnblock(cons);
       ALL_DBG("Task %d unblocked 2\n",cons->uid);
+      /* MONITORING CALLBACK */
+#ifdef USE_TASK_EVENT_LOGGING
+      if (sd->mon && MON_CB(stream_wakeup)) {
+        MON_CB(stream_wakeup)(sd->mon);
+      }
+#endif /** USE_TASK_EVENT_LOGGING */
     }
   }
- 	//LpelTaskCheckYield(self);
+  /* MONITORING CALLBACK */
+#ifdef USE_TASK_EVENT_LOGGING
+  if (sd->mon && MON_CB(stream_writefinish)) {
+    MON_CB(stream_writefinish)(sd->mon);
+  }
+#endif /** USE_TASK_EVENT_LOGGING */
+
+#ifdef USE_LOGGING
+  if (sd->mon && MON_CB(rectype_data))
+  	if(MON_CB(rectype_data)(item))
+#endif /** USE_LOGGING */
+ 	LpelTaskCheckYield(self);
 }
-
-
 
 /**
  * Non-blocking write to a stream
@@ -473,17 +496,7 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
     lpel_stream_desc_t *sd = LpelStreamIterNext( iter);
     lpel_stream_t *s = sd->stream;
     /* lock stream (prod-side) */
-    streamPrint(s,"going to lock in poll 1");
-poll1:;
-    int count = 0;
-    do{
-      if(count++ > 1000) { 
-        pthread_mutex_unlock(&s->prod_lock);
-        //usleep((s->uid)+1000); 
-        usleep((s->uid)+(SCCGetNodeRank()*10)); 
-        goto poll1;
-      }
-    }while(pthread_mutex_trylock(&s->prod_lock) != 0);
+    while(pthread_mutex_trylock(&s->prod_lock) != 0);
     { /* CS BEGIN */
       /* check if there is something in the buffer */
       if ( LpelBufferTop( &s->buffer) != NULL) {
@@ -497,11 +510,9 @@ poll1:;
           self->wakeup_sd = sd;
         }
         /* unlock stream */
-        streamPrint(s,"going to unloc poll 1");
         pthread_mutex_unlock( &s->prod_lock);
         /* exit loop */
         break;
-
       } else {
         /* nothing in the buffer, register stream as activator */
         s->is_poll = 1;
@@ -514,14 +525,12 @@ poll1:;
       }
     } /* CS END */
     /* unlock stream */
-    streamPrint(s,"going to unloc poll 2");
     pthread_mutex_unlock( &s->prod_lock);
   } /* end for each stream */
 
   /* context switch */
   if (do_ctx_switch) {
     /* set task as blocked */
-    //taskPrint(NULL, self, "Poll");
     LpelTaskBlockStream( self);
   }
   assert( atomic_load( &self->poll_token) == 0);
@@ -540,20 +549,9 @@ poll1:;
   LpelStreamIterReset(iter, set);
   while( LpelStreamIterHasNext( iter)) {
     lpel_stream_t *s = (LpelStreamIterNext(iter))->stream;
-    streamPrint(s,"going to loc poll 2");
-poll2:;
-    int count = 0;
-    do{
-      if(count++ > 1000) { 
-        pthread_mutex_unlock(&s->prod_lock);
-        //usleep((s->uid)+500); 
-        usleep((s->uid)+(SCCGetNodeRank()*20)); 
-        goto poll2;
-      }
-    }while(pthread_mutex_trylock(&s->prod_lock) != 0);
+    while(pthread_mutex_trylock(&s->prod_lock) != 0);
     s->is_poll = 0;
-    streamPrint(s,"going to unloc poll 3");
-     pthread_mutex_unlock( &s->prod_lock);
+    pthread_mutex_unlock( &s->prod_lock);
     if (--cnt == 0) break;
   }
 

@@ -111,7 +111,16 @@ void LpelWorkersInit(lpel_config_t *cfg) {
     } else {
       worker->wid=rank-1;
     }
-    worker->mon = NULL;
+#ifdef USE_LOGGING
+		if (MON_CB(worker_create)) {
+			worker->mon = MON_CB(worker_create)(worker->wid);
+      //worker->mon = MON_CB(worker_create)(1);
+		} else {
+			worker->mon = NULL;
+		}
+#else
+	worker->mon = NULL;
+#endif
 
     /* mailbox */
     worker->mailbox = mbox;

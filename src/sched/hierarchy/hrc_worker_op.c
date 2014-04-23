@@ -114,7 +114,7 @@ void LpelWorkerRunTask(lpel_task_t *t) {
 	 workermsg_t msg;
    msg.type = WORKER_MSG_ASSIGN;
 	 msg.body.task = t;
-	LpelMailboxSend(mastermb, &msg);
+	 LpelMailboxSend(mastermb, &msg);
 
 }
 
@@ -133,6 +133,11 @@ static void requestTask(workerctx_t *wc) {
 	msg.type = WORKER_MSG_REQUEST;
 	msg.body.from_worker = wc->wid;
 	LpelMailboxSend(mastermb, &msg);
+#ifdef USE_LOGGING
+	if (wc->mon && MON_CB(worker_waitstart)) {
+		MON_CB(worker_waitstart)(wc->mon);
+	}
+#endif
 }
 
 
@@ -232,7 +237,7 @@ static int getWait(masterctx_t *master) {
 
 static int servePendingReq(masterctx_t *master, lpel_task_t *t) {
   int w;
-  //t->sched_info.prior = LpelTaskCalPriority(t);
+  t->sched_info.prior = LpelTaskCalPriority(t);
   w = getWait(master);
   if (w != -1) {
     WORKER_DBG("master: send task %d to waiting worker %d\n", t->uid, w);
@@ -490,8 +495,6 @@ static void WrapperLoop(workerctx_t *wp)
 {
 	lpel_task_t *t = NULL;
 	workermsg_t msg;
-	//abc = wp->mctx;
-	//xyz;
   
   WORKER_DBG("wrapper: Request work for first time\n");
   requestTask(wp);
@@ -516,6 +519,18 @@ FirstTask:
 				t->state = TASK_READY;
 				wp->current_task = t;
 				t->worker_context = wp;
+#ifdef USE_LOGGING
+				if (t->mon) {
+					if (MON_CB(worker_create_wrapper)) {
+						wp->mon = MON_CB(worker_create_wrapper)(t->mon);
+					} else {
+						wp->mon = NULL;
+					}
+				}
+				if (t->mon && MON_CB(task_assign)) {
+					MON_CB(task_assign)(t->mon, wp->mon);
+				}
+#endif
 				break;
 
 			case WORKER_MSG_WAKEUP:
@@ -525,6 +540,11 @@ FirstTask:
 				t->state = TASK_READY;
 				assert(t->worker_context == wp);
 				wp->current_task = t;
+#ifdef USE_LOGGING
+				if (t->mon && MON_CB(task_assign)) {
+					MON_CB(task_assign)(t->mon, wp->mon);
+				}
+#endif
 				break;
         
 			default:
@@ -557,7 +577,7 @@ void *WrapperThread(void *arg)
 	LpelThreadAssign(wp->wid);
   WrapperLoop(wp);
   WORKER_DBG("wrapper: All done wait for SNETGLOBWAIT\n");
-  //while(SNETGLOBWAIT != SNETGLOBWAITVAL);
+  while(SNETGLOBWAIT != SNETGLOBWAITVAL);
 
 #ifdef USE_MCTX_PCL
 	co_thread_cleanup();
@@ -610,15 +630,22 @@ static void WorkerLoop(workerctx_t *wc)
         assert(t->state == TASK_READY);
   	  	t->worker_context = wc;
   	  	wc->current_task = t;
-
+#ifdef USE_LOGGING
+  	  	if (wc->mon && MON_CB(worker_waitstop)) {
+  	  		MON_CB(worker_waitstop)(wc->mon);
+  	  	}
+  	  	if (t->mon && MON_CB(task_assign)) {
+  	  		MON_CB(task_assign)(t->mon, wc->mon);
+  	  	}
+#endif
   	  	mctx_switch(&wc->mctx, &t->mctx);
   	  	//task return here
   	  	assert(t->state != TASK_RUNNING);
 
   	  	wc->current_task = NULL;
- 	  	t->worker_context = NULL;
+ 	  	  t->worker_context = NULL;
         WORKER_DBG("worker %d: returned task %d\n", wc->wid, t->uid);
-	  	returnTask(t);
+	  	  returnTask(t);
         break;
         
   	  case WORKER_MSG_TERMINATE:
@@ -656,8 +683,15 @@ void *WorkerThread(void *arg)
 
   wc->terminate = 0;
   wc->current_task = NULL;
-	LpelThreadAssign(wc->wid + 1);		// 0 is for the master
+	
 	WorkerLoop(wc);
+  
+#ifdef USE_LOGGING
+  /* cleanup monitoring */
+  if (wc->mon && MON_CB(worker_destroy)) {
+    MON_CB(worker_destroy)(wc->mon);
+  }
+#endif
 
 #ifdef USE_MCTX_PCL
   co_thread_cleanup();
@@ -708,11 +742,9 @@ void LpelWorkerTaskExit(lpel_task_t *t) {
 void LpelWorkerTaskBlock(lpel_task_t *t){
 	workerctx_t *wc = t->worker_context;
 
-	if (wc->wid < 0) {	//wrapper
-			wc->current_task = NULL;
-	} else {
+	if (wc->wid >= 0){ // wrapper does not need to request task
 		WORKER_DBG("worker %d: block task %d\n", wc->wid, t->uid);
-		//sendUpdatePrior(t);		//update prior for neighbor
+		//sendUpdatePrior(t);		//update prior for neighbour
 		requestTask(wc);
 	}
 	wc->current_task = NULL;
@@ -722,9 +754,8 @@ void LpelWorkerTaskBlock(lpel_task_t *t){
 
 void LpelWorkerTaskYield(lpel_task_t *t){
 	workerctx_t *wc = t->worker_context;
-	if (wc->wid < 0) {	//wrapper
-			WORKER_DBG("wrapper: task %d yields\n", t->uid);
-	}	else {
+
+	if (wc->wid >= 0){
 		//sendUpdatePrior(t);		//update prior for neighbor
 		requestTask(wc);
 		WORKER_DBG("worker %d: return task %d\n", wc->wid, t->uid);
@@ -736,18 +767,14 @@ void LpelWorkerTaskYield(lpel_task_t *t){
 void LpelWorkerTaskWakeup(lpel_task_t *t) {
 	workerctx_t *wc = t->worker_context;
 	WORKER_DBG("worker %d: send wake up task %d\n", LpelWorkerSelf()->wid, t->uid);
-	if (wc == NULL){
-		sendWakeup(mastermb, t);
+	
+  if (wc == NULL || wc->wid >= 0){
+    sendWakeup(mastermb, t);
     ALL_DBG("worker %d: send wake up to task %d via masterMB\n", LpelWorkerSelf()->wid, t->uid);
-	} else {
-		if (wc->wid < 0) {
-      sendWakeup(wc->mailbox, t);
-      ALL_DBG("worker %d: send wake up to task %d at mailbox %p\n", LpelWorkerSelf()->wid, t->uid, wc->mailbox);
-		} else {
-      sendWakeup(mastermb, t);
-      ALL_DBG("worker %d: send wake up to task %d via masterMB\n", LpelWorkerSelf()->wid, t->uid);
-    }
-	}
+  } else {
+    sendWakeup(wc->mailbox, t);
+    ALL_DBG("worker %d: send wake up to task %d at mailbox %p\n", LpelWorkerSelf()->wid, t->uid, wc->mailbox);
+  }
 }
 
 

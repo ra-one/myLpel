@@ -31,8 +31,8 @@ struct lpel_stream_desc_t {
                               pthread_mutexattr_setpshared( &attr, PTHREAD_PROCESS_SHARED);\
                               pthread_mutex_init(x,&attr);pthread_mutexattr_destroy(&attr) 
 #define PRODLOCK_DESTROY(x)   pthread_mutex_destroy(x)
-//#define PRODLOCK_LOCK(x)      while(pthread_mutex_trylock(x) != 0);
-#define PRODLOCK_LOCK(x)      pthread_mutex_lock(x);
+#define PRODLOCK_LOCK(x)      while(pthread_mutex_trylock(x) != 0);
+//#define PRODLOCK_LOCK(x)      pthread_mutex_lock(x);
 #define PRODLOCK_UNLOCK(x)    pthread_mutex_unlock(x);
 
 #else

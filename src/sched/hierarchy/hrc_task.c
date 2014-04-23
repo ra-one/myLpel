@@ -112,6 +112,13 @@ void LpelTaskDestroy( lpel_task_t *t)
 {
 	assert( t->state == TASK_ZOMBIE);
 
+#ifdef USE_TASK_EVENT_LOGGING
+	/* if task had a monitoring object, destroy it */
+	if (t->mon && MON_CB(task_destroy)) {
+		MON_CB(task_destroy)(t->mon);
+	}
+#endif
+
 	atomic_destroy( &t->poll_token);
 
 	//FIXME
@@ -216,16 +223,6 @@ void LpelTaskBlockStream(lpel_task_t *t)
   TaskStop( t);
   LpelWorkerTaskBlock(t);
   TaskStart( t);	
-  /*
-  //printf("LpelTaskBlockStream 1: task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",t->uid,t->wrapper,t->state,t->worker_context,t->worker_context->wid,t->worker_context->mctx);
-	// a reference to it is held in the stream 
-	if(!(t->wrapper)){assert( t->state == TASK_RUNNING );}
-	t->state = TASK_BLOCKED;
-	//TaskStop( t);
-	//printf("LpelTaskBlockStream 2: task %d, t->wrapper %d,state :%c: ctx %p, wid %d, wctx %p\n\n",t->uid,t->wrapper,t->state,t->worker_context,t->worker_context->wid,t->worker_context->mctx);
-	LpelWorkerTaskBlock(t);
-	TaskStart( t);		// task will be backed here when it is dispatched the next time
-  */
 }
 
 
@@ -283,6 +280,12 @@ static void TaskStart( lpel_task_t *t)
 	// TODO reset task scheduling info
 
 	assert( t->state == TASK_READY );
+	/* MONITORING CALLBACK */
+#ifdef USE_TASK_EVENT_LOGGING
+	if (t->mon && MON_CB(task_start)) {
+		MON_CB(task_start)(t->mon);
+	}
+#endif
 
 	t->sched_info.rec_cnt = 0;	// reset rec_cnt
 	t->state = TASK_RUNNING;
@@ -292,6 +295,11 @@ static void TaskStart( lpel_task_t *t)
 static void TaskStop( lpel_task_t *t)
 {
 	/* MONITORING CALLBACK */
+#ifdef USE_TASK_EVENT_LOGGING
+	if (t->mon && MON_CB(task_stop)) {
+		MON_CB(task_stop)(t->mon, t->state);
+	}
+#endif
 }
 
 
@@ -300,10 +308,11 @@ static void TaskStop( lpel_task_t *t)
  * increase the rec count by 1, if it reaches the limit then yield
  */
 void LpelTaskCheckYield(lpel_task_t *t) {
-
+  
 	assert( t->state == TASK_RUNNING );
 
 	if (t->sched_info.rec_limit < 0) {		//limit < 0 --> no yield
+    printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  RecLim is Negative; returning now\n");
 		return;
 	}
 
@@ -384,8 +393,8 @@ void LpelTaskRemoveStream( lpel_task_t *t, lpel_stream_desc_t *des, char mode) {
 
 
 int countRec(stream_elem_t *list, char inout) {
-	if (list == NULL)
-		return -1;
+	if (list == NULL) return -1;
+  
 	int cnt = 0;
 	int flag = 0;
 	while (list != NULL) {
@@ -394,8 +403,9 @@ int countRec(stream_elem_t *list, char inout) {
 					|| (inout == 'o' && list->stream_desc->stream->type == LPEL_STREAM_EXIT)) {
 				// if input stream is entry or output stream is exit --> not count
 				flag = 1;
-			} else
+			} else {
 				cnt += LpelStreamFillLevel(list->stream_desc->stream);
+      }
 		}
 		list = list->next;
 	}
