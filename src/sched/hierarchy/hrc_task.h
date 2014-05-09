@@ -38,6 +38,7 @@ typedef struct {
 } sched_task_t;
 
 
+
 /**
  * TASK CONTROL BLOCK
  */
@@ -79,6 +80,7 @@ void LpelTaskDestroy(lpel_task_t *t);
 void LpelTaskBlockStream(lpel_task_t *ct);
 void LpelTaskUnblock(lpel_task_t *t);
 int LpelTaskIsWrapper(lpel_task_t *);
+void LpelTaskGetInfo( lpel_task_t *t,char *s);
 
 /******* DYNAMIC PRIORITY BASED ON THE STREAM FILL LEVEL ***********/
 /**

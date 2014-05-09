@@ -16,7 +16,7 @@
 #include "hrc_task.h"
 
 //#define BLOCKSIZE 50
-#define BLOCKSIZE 100
+#define BLOCKSIZE 400
 
 struct taskqueue_t{
   lpel_task_t **heap;

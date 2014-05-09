@@ -36,7 +36,7 @@
 
 //#define _USE_WORKER_DBG__
 
-#define MASTER_DBG printf
+#define MASTER_DBG //
 
 #ifdef _USE_WORKER_DBG__
 #define WORKER_DBG printf
@@ -114,6 +114,7 @@ void LpelWorkerRunTask(lpel_task_t *t) {
 	 workermsg_t msg;
    msg.type = WORKER_MSG_ASSIGN;
 	 msg.body.task = t;
+   //printf("workerOP: task %p id %d state %c sent to master\n",t,t->uid,t->state);
 	 LpelMailboxSend(mastermb, &msg);
 
 }
@@ -288,6 +289,8 @@ static void updatePriorityNeigh(taskqueue_t *tq, lpel_task_t *t) {
 
 static void MasterLoop(masterctx_t *master)
 {
+  FILE *waitingTaskLogFile = fopen("/shared/nil/Out/waitingTask.log", "w");
+  
 	MASTER_DBG("start master\n");
 	do {
 		workermsg_t msg;
@@ -300,6 +303,7 @@ static void MasterLoop(masterctx_t *master)
 		case WORKER_MSG_ASSIGN:
 			/* master receive a new task */
 			t = msg.body.task;
+      //printf("master: task %p id %d state %c\n",t,t->uid,t->state);
 			assert (t->state == TASK_CREATED);
 			t->state = TASK_READY;
       if(t->wrapper == 0){ //normal task
@@ -444,7 +448,10 @@ static void MasterLoop(masterctx_t *master)
 			assert(0);
 		}
     MASTER_DBG("TaskqueueSize %d, WrapperqueueSize %d\n\n",LpelTaskqueueSize(master->ready_tasks),LpelTaskqueueSize(master->ready_wrappers));
+    printf("TaskqueueSize %d\n",LpelTaskqueueSize(master->ready_tasks));
+    fprintf(waitingTaskLogFile,"%d\n",LpelTaskqueueSize(master->ready_tasks));
 	} while (!(master->terminate && LpelTaskqueueSize(master->ready_tasks) == 0));
+  fclose(waitingTaskLogFile);
 }
 
 
@@ -504,7 +511,7 @@ static void WrapperLoop(workerctx_t *wp)
 		t = wp->current_task;
 		if (t != NULL) {
 			/* execute task */
-			WORKER_DBG(stderr,"wrapper: switch to task %d tctx %p from wctx %p\n", t->uid,&t->mctx,&wp->mctx);
+			WORKER_DBG("wrapper: switch to task %d tctx %p from wctx %p\n", t->uid,&t->mctx,&wp->mctx);
 			assert(t->worker_context == wp);
       mctx_switch(&wp->mctx, &t->mctx);
 		} else {

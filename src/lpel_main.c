@@ -50,8 +50,8 @@ void LpelInit(lpel_config_t *cfg)
 {
   /* store a local copy of cfg */
   _lpel_global_config = *cfg;
-  
-#ifdef USE_MCTX_PCL
+
+  #ifdef USE_MCTX_PCL
   int res = co_thread_init();
   /* initialize machine context for main thread */
   assert( 0 == res);
@@ -62,7 +62,7 @@ void LpelInit(lpel_config_t *cfg)
 int LpelStart(lpel_config_t *cfg)
 {
   int res;
-
+ 
   /* initialise workers */
   LpelWorkersInit( cfg);
 

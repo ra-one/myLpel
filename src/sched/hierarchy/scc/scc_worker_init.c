@@ -64,6 +64,7 @@ void LpelWorkersInit(lpel_config_t *cfg) {
 	/* local variables used in worker operations */
   num_workers = size - 1; //minus the master
   num_wrappers = SCCGetNumWrappers();
+  
 	initLocalVar(num_workers,num_wrappers);
   
   /*ini mailbox*/

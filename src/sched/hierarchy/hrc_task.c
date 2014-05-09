@@ -26,6 +26,8 @@ static void TaskStop( lpel_task_t *t);
 #define TASK_STACK_ALIGN  256
 #define TASK_MINSIZE  4096
 
+#define TSK_DBG //
+
 
 /**
  * Create a task.
@@ -40,7 +42,6 @@ static void TaskStop( lpel_task_t *t);
  * @return the task handle of the created task (pointer to TCB)
  *
  */
-
 lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 		void *inarg, int size)
 {
@@ -48,20 +49,29 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 	lpel_task_t *t;
 	char *stackaddr;
 	int offset;
+  int siz = size;
 
-	if (size <= 0) {
-		size = LPEL_TASK_SIZE_DEFAULT;
+	if (siz <= 0) {
+		siz = LPEL_TASK_SIZE_DEFAULT;
 	}
-	assert( size >= TASK_MINSIZE );
-
-	/* aligned to page boundary */
-	t = SCCMallocPtr( size );
-
-	/* calc stackaddr */
+	assert( siz >= TASK_MINSIZE );
+  
+  TSK_DBG("\ntask.c: start create task siz %d\n",siz);
+  
+  
+  	/* calc stackaddr */
+  siz = (siz + sizeof(lpel_task_t) + TASK_STACK_ALIGN-1) & ~(TASK_STACK_ALIGN-1);
+    
+  t = SCCMallocPtr( siz );
+  
+  TSK_DBG("task.c: create task %p, siz %d\n",t,siz);
+  
 	offset = (sizeof(lpel_task_t) + TASK_STACK_ALIGN-1) & ~(TASK_STACK_ALIGN-1);
 	stackaddr = (char *) t + offset;
-	t->size = size;
+  t->size = siz;
   
+  TSK_DBG("task.c: create task %p, t->size %d, offset %d, stackaddr %p\n",t,t->size,offset,stackaddr);
+	
   //all tasks should be created and sent to master
   if (map == LPEL_MAP_MASTER )	
 		t->wrapper = 0;  //normal task
@@ -69,9 +79,11 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
     t->wrapper = 1;
     
   t->worker_context = NULL; 
-  
 	t->uid = (SCCGetNodeRank()*100)+atomic_fetch_add( &taskseq, 1);  /* obtain a unique task id */
-	t->func = func;
+  
+  TSK_DBG("task.c: create task %p, t->uid %d\n",t,t->uid);
+	
+  t->func = func;
 	t->inarg = inarg;
 
 	/* initialize poll token to 0 */
@@ -83,14 +95,16 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 	t->prev = t->next = NULL;
 
 	t->mon = NULL;
-
+  TSK_DBG("task.c: before co_create, create task %p, t->uid %d, t->state %c\n",t,t->uid,t->state);
+  
 	/* function, argument (data), stack base address, stacksize */
 	//mctx_create( &t->mctx, TaskStartup, (void*)t, stackaddr, t->size - offset);
-  t->mctx=co_create(TaskStartup, (void*)t, NULL,8192);
+  //t->mctx=co_create(TaskStartup, (void*)t, NULL,8192);
+  t->mctx=co_create(TaskStartup, (void*)t, stackaddr,t->size - offset);
 #ifdef USE_MCTX_PCL
 	assert(t->mctx != NULL);
 #endif
-
+  TSK_DBG("task.c: create task %p, t->uid %d, t->mctx %p\n",t,t->uid,t->mctx);
 	// default scheduling info
 	t->sched_info.prior = 0;
 	t->sched_info.rec_cnt = 0;
@@ -99,10 +113,9 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 	t->sched_info.in_streams = NULL;
 	t->sched_info.out_streams = NULL;
   ALL_DBG("task.c: task %p, id %d, context %p\n",t,t->uid,t->worker_context);
+  TSK_DBG("task.c: end create task %p, id %d, state %c\n",t,t->uid,t->state);
 	return t;
 }
-
-
 
 /**
  * Destroy a task
@@ -155,12 +168,16 @@ void LpelTaskMonitor(lpel_task_t *t, mon_task_t *mt)
  */
 void LpelTaskStart( lpel_task_t *t)
 {
+  TSK_DBG("task.c LpelTaskStart id %d, state %c\n",t->uid,t->state);
 	assert( t->state == TASK_CREATED );
 
 	LpelWorkerRunTask( t);
 }
 
-
+void LpelTaskGetInfo( lpel_task_t *t,char *s)
+{
+  printf("%s task.c uid %d, state %c\n",s,t->uid,t->state);
+}
 
 /**
  * Get the current task
@@ -312,7 +329,7 @@ void LpelTaskCheckYield(lpel_task_t *t) {
 	assert( t->state == TASK_RUNNING );
 
 	if (t->sched_info.rec_limit < 0) {		//limit < 0 --> no yield
-    printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  RecLim is Negative; returning now\n");
+    //printf("++++++++++++++++++++++++++++++++++++++++++++++++++++  RecLim is Negative; no yield; task: %d\n",t->uid);
 		return;
 	}
 
