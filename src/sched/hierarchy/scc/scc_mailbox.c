@@ -30,6 +30,7 @@ struct mailbox_t {
 };
 
 //#define _USE_MBX_DBG__
+//#define MAILBOX_DBG_LIST
 
 #ifdef _USE_MBX_DBG__
 #define MAILBOX_DBG_LOCK printf

@@ -34,15 +34,8 @@
 
 #include "scc_lpel.h"
 
-//#define _USE_WORKER_DBG__
-
 #define MASTER_DBG //
-
-#ifdef _USE_WORKER_DBG__
-#define WORKER_DBG printf
-#else
-#define WORKER_DBG	//
-#endif
+#define WORKER_DBG //
 
 #ifdef USE_SCC
 #define LpelThreadAssign //
@@ -303,7 +296,6 @@ static void MasterLoop(masterctx_t *master)
 		case WORKER_MSG_ASSIGN:
 			/* master receive a new task */
 			t = msg.body.task;
-      //printf("master: task %p id %d state %c\n",t,t->uid,t->state);
 			assert (t->state == TASK_CREATED);
 			t->state = TASK_READY;
       if(t->wrapper == 0){ //normal task
@@ -633,7 +625,8 @@ static void WorkerLoop(workerctx_t *wc)
   	  switch(msg.type) {
   	  case WORKER_MSG_ASSIGN:
   	  	t = msg.body.task;
-  	  	WORKER_DBG("worker %d: got task %d, isWrapper: %d\n", wc->wid, t->uid,t->wrapper);
+  	  	WORKER_DBG("worker %d: got task %d (%p), state %c, isWrapper: %d\n", wc->wid, t->uid,t,t->state,t->wrapper);
+        
         assert(t->state == TASK_READY);
   	  	t->worker_context = wc;
   	  	wc->current_task = t;

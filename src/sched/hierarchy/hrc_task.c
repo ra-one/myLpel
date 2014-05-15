@@ -45,16 +45,15 @@ static void TaskStop( lpel_task_t *t);
 lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 		void *inarg, int size)
 {
-   
-	lpel_task_t *t;
-	char *stackaddr;
-	int offset;
+  lpel_task_t *t;
+  char *stackaddr;
+  int offset;
   int siz = size;
 
-	if (siz <= 0) {
-		siz = LPEL_TASK_SIZE_DEFAULT;
-	}
-	assert( siz >= TASK_MINSIZE );
+  if (siz <= 0) {
+    siz = LPEL_TASK_SIZE_DEFAULT;
+  }
+  assert( siz >= TASK_MINSIZE );
   
   TSK_DBG("\ntask.c: start create task siz %d\n",siz);
   
@@ -66,8 +65,8 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
   
   TSK_DBG("task.c: create task %p, siz %d\n",t,siz);
   
-	offset = (sizeof(lpel_task_t) + TASK_STACK_ALIGN-1) & ~(TASK_STACK_ALIGN-1);
-	stackaddr = (char *) t + offset;
+  offset = (sizeof(lpel_task_t) + TASK_STACK_ALIGN-1) & ~(TASK_STACK_ALIGN-1);
+  stackaddr = (char *) t + offset;
   t->size = siz;
   
   TSK_DBG("task.c: create task %p, t->size %d, offset %d, stackaddr %p\n",t,t->size,offset,stackaddr);
@@ -113,9 +112,10 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 	t->sched_info.in_streams = NULL;
 	t->sched_info.out_streams = NULL;
   ALL_DBG("task.c: task %p, id %d, context %p\n",t,t->uid,t->worker_context);
-  TSK_DBG("task.c: end create task %p, id %d, state %c\n",t,t->uid,t->state);
+  TSK_DBG("task.c: create task %p, id %d, state %c\n",t,t->uid,t->state);
 	return t;
 }
+
 
 /**
  * Destroy a task
@@ -170,8 +170,7 @@ void LpelTaskStart( lpel_task_t *t)
 {
   TSK_DBG("task.c LpelTaskStart id %d, state %c\n",t->uid,t->state);
 	assert( t->state == TASK_CREATED );
-
-	LpelWorkerRunTask( t);
+  LpelWorkerRunTask( t);
 }
 
 void LpelTaskGetInfo( lpel_task_t *t,char *s)
@@ -329,7 +328,6 @@ void LpelTaskCheckYield(lpel_task_t *t) {
 	assert( t->state == TASK_RUNNING );
 
 	if (t->sched_info.rec_limit < 0) {		//limit < 0 --> no yield
-    //printf("++++++++++++++++++++++++++++++++++++++++++++++++++++  RecLim is Negative; no yield; task: %d\n",t->uid);
 		return;
 	}
 

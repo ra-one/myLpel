@@ -44,8 +44,9 @@ typedef struct {
  */
 struct lpel_task_t {
   /** intrinsic pointers for organizing tasks in a list*/
-  struct lpel_task_t *prev, *next;
   unsigned int uid;    /** unique identifier */
+  struct lpel_task_t *prev, *next;
+  
   lpel_taskstate_t state;   /** state */
   int wakenup;						/** to keep track that the task has been waked up before returned */
 
