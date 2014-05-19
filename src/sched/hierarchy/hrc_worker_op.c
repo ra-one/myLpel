@@ -40,6 +40,7 @@
 #ifdef USE_SCC
 #define LpelThreadAssign //
 #endif
+static int waitingWorkers = 0;
 
 /******************* PRIVATE FUNCTIONS *****************************/
 static void addFreeWrapper(workerctx_t *wp);
@@ -203,6 +204,7 @@ static void addWait(masterctx_t *master, int worker) {
   master->next_wait = (master->next_wait + 1) % master->num_workers;
   // get time when it start waiting
   master->start_worker_wait[worker] = SCCGetTime();
+  waitingWorkers++;
 }
 
 /* get the first waiting worker, if non, return -1 */
@@ -236,6 +238,7 @@ static int servePendingReq(masterctx_t *master, lpel_task_t *t) {
   if (w != -1) {
     WORKER_DBG("master: send task %d to waiting worker %d\n", t->uid, w);
     sendTask(w, t);
+    waitingWorkers--;
   }
   return w;
 }
@@ -440,8 +443,8 @@ static void MasterLoop(masterctx_t *master)
 			assert(0);
 		}
     MASTER_DBG("TaskqueueSize %d, WrapperqueueSize %d\n\n",LpelTaskqueueSize(master->ready_tasks),LpelTaskqueueSize(master->ready_wrappers));
-    printf("TaskqueueSize %d\n",LpelTaskqueueSize(master->ready_tasks));
-    fprintf(waitingTaskLogFile,"%d\n",LpelTaskqueueSize(master->ready_tasks));
+    printf("TaskqueueSize %d, WaitingWorkers %d\n",LpelTaskqueueSize(master->ready_tasks),waitingWorkers);
+    fprintf(waitingTaskLogFile,"%d##%d\n",LpelTaskqueueSize(master->ready_tasks),waitingWorkers);
 	} while (!(master->terminate && LpelTaskqueueSize(master->ready_tasks) == 0));
   fclose(waitingTaskLogFile);
 }
@@ -643,7 +646,7 @@ static void WorkerLoop(workerctx_t *wc)
   	  	assert(t->state != TASK_RUNNING);
 
   	  	wc->current_task = NULL;
- 	  	  t->worker_context = NULL;
+ 	  	  t->worker_context = NULL;        
         WORKER_DBG("worker %d: returned task %d\n", wc->wid, t->uid);
 	  	  returnTask(t);
         break;

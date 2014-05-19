@@ -20,6 +20,7 @@
 #define STREAM_DBG printf
 #else
 #define STREAM_DBG	//
+#define MUTX_DBG //
 #endif
 
 static atomic_int stream_seq = ATOMIC_VAR_INIT(0);
@@ -368,8 +369,17 @@ void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
   	}
   }
 
-  /* writing to the buffer and checking if consumer polls must be atomic */
-  while(pthread_mutex_trylock(&sd->stream->prod_lock) != 0);
+write:;
+  int count = 0;
+  do{
+    if(count++ > 1000){
+      pthread_mutex_unlock(&sd->stream->prod_lock);
+      usleep(sd->stream->uid/1000);
+      goto write;
+    } 
+    /* writing to the buffer and checking if consumer polls must be atomic */
+    //if(count == 1) MUTX_DBG("Mutex lock in write stream %d\n",sd->stream->uid);
+  }while(pthread_mutex_trylock(&sd->stream->prod_lock) != 0);
   {
     /* there must be space now in buffer */
     assert( LpelBufferIsSpace( &sd->stream->buffer) );
@@ -382,6 +392,7 @@ void LpelStreamWrite( lpel_stream_desc_t *sd, void *item)
       sd->stream->is_poll = 0;
     }
   }
+  MUTX_DBG("Mutex UNlock in write stream %d\n",sd->stream->uid);
   pthread_mutex_unlock(&sd->stream->prod_lock);
 
   /* quasi V(n_sem) */
@@ -496,6 +507,7 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
     lpel_stream_desc_t *sd = LpelStreamIterNext( iter);
     lpel_stream_t *s = sd->stream;
     /* lock stream (prod-side) */
+    MUTX_DBG("Mutex lock 1 in poll stream %d\n",s->uid);
     while(pthread_mutex_trylock(&s->prod_lock) != 0);
     { /* CS BEGIN */
       /* check if there is something in the buffer */
@@ -510,6 +522,7 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
           self->wakeup_sd = sd;
         }
         /* unlock stream */
+        MUTX_DBG("Mutex UNlock 1.1 in poll stream %d\n",s->uid);
         pthread_mutex_unlock( &s->prod_lock);
         /* exit loop */
         break;
@@ -525,6 +538,7 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
       }
     } /* CS END */
     /* unlock stream */
+    MUTX_DBG("Mutex UNlock 1.2 in poll stream %d\n",s->uid);
     pthread_mutex_unlock( &s->prod_lock);
   } /* end for each stream */
 
@@ -549,8 +563,10 @@ lpel_stream_desc_t *LpelStreamPoll( lpel_streamset_t *set)
   LpelStreamIterReset(iter, set);
   while( LpelStreamIterHasNext( iter)) {
     lpel_stream_t *s = (LpelStreamIterNext(iter))->stream;
+    MUTX_DBG("Mutex lock 2 in poll stream %d\n",s->uid);
     while(pthread_mutex_trylock(&s->prod_lock) != 0);
     s->is_poll = 0;
+    MUTX_DBG("Mutex UNlock 2 in poll stream %d\n",s->uid);
     pthread_mutex_unlock( &s->prod_lock);
     if (--cnt == 0) break;
   }

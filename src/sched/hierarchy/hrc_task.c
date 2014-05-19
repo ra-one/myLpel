@@ -47,29 +47,19 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 {
   lpel_task_t *t;
   char *stackaddr;
-  int offset;
-  int siz = size;
-
-  if (siz <= 0) {
-    siz = LPEL_TASK_SIZE_DEFAULT;
-  }
-  assert( siz >= TASK_MINSIZE );
-  
-  TSK_DBG("\ntask.c: start create task siz %d\n",siz);
-  
-  
-  	/* calc stackaddr */
-  siz = (siz + sizeof(lpel_task_t) + TASK_STACK_ALIGN-1) & ~(TASK_STACK_ALIGN-1);
+ 
+  /* calc stackaddr */
+  int lSize = (TASK_MINSIZE + sizeof(lpel_task_t));
     
-  t = SCCMallocPtr( siz );
+  t = SCCMallocPtr( lSize );
   
-  TSK_DBG("task.c: create task %p, siz %d\n",t,siz);
+  TSK_DBG("task.c: create task %p, size %d\n",t,lSize);
+ 
   
-  offset = (sizeof(lpel_task_t) + TASK_STACK_ALIGN-1) & ~(TASK_STACK_ALIGN-1);
-  stackaddr = (char *) t + offset;
-  t->size = siz;
+  stackaddr = (char *) t + sizeof(lpel_task_t);
+  t->size = lSize;
   
-  TSK_DBG("task.c: create task %p, t->size %d, offset %d, stackaddr %p\n",t,t->size,offset,stackaddr);
+  TSK_DBG("task.c: create task %p, t->size %d, stackaddr %p\n",t,t->size,stackaddr);
 	
   //all tasks should be created and sent to master
   if (map == LPEL_MAP_MASTER )	
@@ -97,9 +87,7 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
   TSK_DBG("task.c: before co_create, create task %p, t->uid %d, t->state %c\n",t,t->uid,t->state);
   
 	/* function, argument (data), stack base address, stacksize */
-	//mctx_create( &t->mctx, TaskStartup, (void*)t, stackaddr, t->size - offset);
-  //t->mctx=co_create(TaskStartup, (void*)t, NULL,8192);
-  t->mctx=co_create(TaskStartup, (void*)t, stackaddr,t->size - offset);
+  t->mctx=co_create(TaskStartup, (void*)t, stackaddr,t->size - sizeof(lpel_task_t));
 #ifdef USE_MCTX_PCL
 	assert(t->mctx != NULL);
 #endif
@@ -113,9 +101,8 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 	t->sched_info.out_streams = NULL;
   ALL_DBG("task.c: task %p, id %d, context %p\n",t,t->uid,t->worker_context);
   TSK_DBG("task.c: create task %p, id %d, state %c\n",t,t->uid,t->state);
-	return t;
+  return t;
 }
-
 
 /**
  * Destroy a task
