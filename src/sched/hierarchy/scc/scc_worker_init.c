@@ -129,7 +129,7 @@ void LpelWorkersInit(lpel_config_t *cfg) {
     worker->free_stream = NULL;
     worker->next = NULL;
     WORKER_DBG("workerInit: node physical location %d, rank %d, wid %d, worker->mailbox %p\n",SCCGetNodeID(), SCCGetNodeRank(),worker->wid,worker->mailbox);
-    printf("workerInit: node physical location %d, rank %d, wid %d, worker->mailbox %p\n",SCCGetNodeID(), SCCGetNodeRank(),worker->wid,worker->mailbox); fflush(stdout);
+    NO_SCRIPT_DBG("workerInit: node physical location %d, rank %d, wid %d, worker->mailbox %p\n",SCCGetNodeID(), SCCGetNodeRank(),worker->wid,worker->mailbox); fflush(stdout);
   }
 }
 
