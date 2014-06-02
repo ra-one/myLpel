@@ -47,17 +47,21 @@ lpel_task_t *LpelTaskCreate( int map, lpel_taskfunc_t func,
 {
   lpel_task_t *t;
   char *stackaddr;
+  int offset;
+  
+  if (size <= 0) {
+    size = 8192; //8KB
+  }
+  assert( size >= TASK_MINSIZE );
+  
+  t = SCCMallocPtr( size );
+  
+  TSK_DBG("task.c: create task %p, size %d\n",t,size);
  
   /* calc stackaddr */
-  int lSize = (TASK_MINSIZE + sizeof(lpel_task_t));
-    
-  t = SCCMallocPtr( lSize );
-  
-  TSK_DBG("task.c: create task %p, size %d\n",t,lSize);
- 
-  
   stackaddr = (char *) t + sizeof(lpel_task_t);
-  t->size = lSize;
+  t->size = size;
+  
   
   TSK_DBG("task.c: create task %p, t->size %d, stackaddr %p\n",t,t->size,stackaddr);
 	

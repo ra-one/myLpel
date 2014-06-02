@@ -23,19 +23,18 @@ typedef struct mailbox_node_t {
 
 struct mailbox_t {
   pthread_mutex_t     lock_inbox;
-  mailbox_node_t      *list_free;
-  mailbox_node_t      *list_inbox;
+  volatile mailbox_node_t      *list_free;
+  volatile mailbox_node_t      *list_inbox;
   mailbox_node_t      *tail;
   int                 mbox_ID;
 };
 
 //#define _USE_MBX_DBG__
-//#define MAILBOX_DBG_LIST
 
 #ifdef _USE_MBX_DBG__
 #define MAILBOX_DBG_LOCK printf
-#define MAILBOX_DBG	//
-#define MAILBOX_DBG_LIST
+#define MAILBOX_DBG printf
+//#define MAILBOX_DBG_LIST
 #else
 #define MAILBOX_DBG_LOCK //
 #define MAILBOX_DBG	//
@@ -154,10 +153,12 @@ void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
 
 void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
 {
+	long counter = 0;
   mailbox_node_t *node;
   bool message=false,go_on=false;
 
   while(go_on==false){
+  	counter++;
     if(mbox->list_inbox != NULL){
       int value=-1;
       while(value != 0){
@@ -165,7 +166,14 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
       }     	
       MAILBOX_DBG_LOCK("Mailbox recv: locked %d at %f\n",mbox->mbox_ID,SCCGetTime());
       go_on=true;
-    }
+    } /*else {
+    	counter++;
+	    //printf(". ");
+    	if(mbox->list_inbox == NULL && counter == 1000) { 
+    		//printf(". %d\t",mbox->list_inbox); 
+    		counter = 0; 
+    	}
+    }*/
   }
 
   assert( mbox->list_inbox != NULL);
