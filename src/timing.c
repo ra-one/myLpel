@@ -13,6 +13,16 @@
 
 #define TIMING_BILLION 1000000000L
 
+void LpelTimingIni(lpel_timing_t *t)
+{
+  if(SCCIsMaster()){
+    TIMESTAMP( t);
+    memcpy((void*)TIMEADDR, (const void*)t, sizeof(timespecSCC));
+  }else{
+    memcpy((void*)t, (const void*)TIMEADDR, sizeof(timespecSCC));
+  }
+}
+
 
 /**
  * Current timestamp

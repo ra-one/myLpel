@@ -209,8 +209,9 @@ static void addWait(masterctx_t *master, int worker) {
 
 /* get the first waiting worker, if non, return -1 */
 static int getWait(masterctx_t *master) {
-  if (master->first_wait == master->next_wait) { //array of waiting worker must be either empty or full
-     // empty
+  //array of waiting worker must be either empty or full
+  if (master->first_wait == master->next_wait) { 
+     // array is empty return -1
     if (master->waitworkers[master->first_wait] == -1) return -1;
   }
 

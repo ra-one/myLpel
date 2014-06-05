@@ -6,6 +6,8 @@
 #include "hrc_lpel.h"
 #include "scc.h"
 
+#define printf //
+
 extern uintptr_t *allMbox;
 pthread_mutexattr_t attr;
 
@@ -147,7 +149,7 @@ void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)
   MAILBOX_DBG_LOCK("Mailbox send: unlocked %d at %f\n\n",mbox->mbox_ID,SCCGetTime());
   
   atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
-  //printf("-----------------------------------> msg sent to %d\n",mbox->mbox_ID);
+  printf("-----------------------------------> msg sent to %d\n",mbox->mbox_ID);
 }
 
 
@@ -156,7 +158,7 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
 	long counter = 0;
   mailbox_node_t *node;
   bool message=false,go_on=false;
-
+  printf("-----------------------------------> in recv\n");
   while(go_on==false){
   	counter++;
     if(mbox->list_inbox != NULL){
@@ -195,7 +197,7 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
   MAILBOX_DBG_LOCK("Mailbox recv: unlocked %d at %f\n\n",mbox->mbox_ID,SCCGetTime());
   
   atomic_writeR(&atomic_inc_regs[mbox->mbox_ID],0);
-  //printf("-----------------------------------> msg received from %d\n",wid);
+  printf("-----------------------------------> msg received from %d\n",wid);
 }
 
 /**
