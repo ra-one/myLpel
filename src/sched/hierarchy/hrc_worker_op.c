@@ -41,6 +41,8 @@
 #define LpelThreadAssign //
 #endif
 static int waitingWorkers = 0;
+extern long long int requestServiced;
+
 
 /******************* PRIVATE FUNCTIONS *****************************/
 static void addFreeWrapper(workerctx_t *wp);
@@ -286,13 +288,14 @@ static void updatePriorityNeigh(taskqueue_t *tq, lpel_task_t *t) {
 
 static void MasterLoop(masterctx_t *master)
 {
-  FILE *waitingTaskLogFile = fopen("/shared/nil/Out/waitingTask.log", "w");
+  //FILE *waitingTaskLogFile = fopen("/shared/nil/Out/waitingTask.log", "w");
   
 	MASTER_DBG("start master\n");
 	do {
 		workermsg_t msg;
 
 		LpelMailboxRecv(mastermb, &msg);
+    requestServiced++;
     MASTER_DBG("\n\n\nmaster: MSG received, handle it! %f\n",SCCGetTime());
 		lpel_task_t *t;
 		int wid;
@@ -445,9 +448,8 @@ static void MasterLoop(masterctx_t *master)
 		}
     MASTER_DBG("TaskqueueSize %d, WrapperqueueSize %d\n\n",LpelTaskqueueSize(master->ready_tasks),LpelTaskqueueSize(master->ready_wrappers));
     printf("TaskqueueSize %d, WaitingWorkers %d\n",LpelTaskqueueSize(master->ready_tasks),waitingWorkers);
-    fprintf(waitingTaskLogFile,"%d##%d\n",LpelTaskqueueSize(master->ready_tasks),waitingWorkers);
+    //fprintf(waitingTaskLogFile,"%d##%d\n",LpelTaskqueueSize(master->ready_tasks),waitingWorkers);
 	} while (!(master->terminate && LpelTaskqueueSize(master->ready_tasks) == 0));
-  fclose(waitingTaskLogFile);
 }
 
 
