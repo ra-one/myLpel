@@ -9,7 +9,6 @@
 #define printf //
 
 extern uintptr_t *allMbox;
-pthread_mutexattr_t attr;
 
 /* Utility functions*/
 typedef int bool;
@@ -24,9 +23,8 @@ typedef struct mailbox_node_t {
 } mailbox_node_t;
 
 struct mailbox_t {
-  pthread_mutex_t     lock_inbox;
-  volatile mailbox_node_t      *list_free;
-  volatile mailbox_node_t      *list_inbox;
+  mailbox_node_t      *list_free;
+  mailbox_node_t      *list_inbox;
   mailbox_node_t      *tail;
   int                 mbox_ID;
 };
@@ -83,10 +81,6 @@ mailbox_t *LpelMailboxCreate(void)
 {
   mailbox_t *mbox = allMbox[SCCGetNodeRank()];
 
-  pthread_mutexattr_init( &attr);
-  pthread_mutexattr_setpshared( &attr, PTHREAD_PROCESS_SHARED);
-  
-  pthread_mutex_init( &mbox->lock_inbox, &attr);
   mbox->list_free  = NULL;
   mbox->list_inbox = NULL;
   mbox->tail = NULL;
@@ -111,13 +105,7 @@ void LpelMailboxDestroy( mailbox_t *mbox)
     SCCFreePtr( node);   
   }
 
-  /* destroy sync primitives */
-  pthread_mutex_destroy( &mbox->lock_inbox);
-
   //free(mbox); // as mbox is not allocated
-  
-  /* destroy an attribute */
-  pthread_mutexattr_destroy(&attr);
 }
 
 void LpelMailboxSend( mailbox_t *mbox, workermsg_t *msg)

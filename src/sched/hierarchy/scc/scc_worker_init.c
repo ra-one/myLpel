@@ -62,7 +62,7 @@ void LpelWorkersInit(lpel_config_t *cfg) {
 	assert(0 <= size);
 	 
 	/* local variables used in worker operations */
-  num_workers = size - 1; //minus the master
+  num_workers = size - 1; //minus the master // can use SCCGetNumWrorker()-1;
   num_wrappers = SCCGetNumWrappers();
   
 	initLocalVar(num_workers,num_wrappers);

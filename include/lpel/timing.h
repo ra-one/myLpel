@@ -5,7 +5,7 @@
 
 typedef timespecSCC lpel_timing_t;
 
-#define LPEL_TIMING_INITIALIZER  {0,0,0,0}
+#define LPEL_TIMING_INITIALIZER  {0,0}
 
 void LpelTimingIni(lpel_timing_t *t);
 void LpelTimingNow(lpel_timing_t *t);
