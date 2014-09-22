@@ -8,7 +8,6 @@
 #include "scc.h"
 #endif /*USE_SCC*/
 
-#define DCMflush(); //
 
 typedef coroutine_t mctx_t;
 
@@ -29,13 +28,7 @@ static inline void mctx_switch(mctx_t *octx, mctx_t *nctx)
 
 static inline void mctx_switchOLD(mctx_t *octx, mctx_t *nctx)
 {
-#ifdef USE_SCC
-  DCMflush();
   (void) co_call(*nctx);
-  DCMflush();
-#else /*USE_SCC*/
-  (void) co_call(*nctx);
-#endif /*USE_SCC*/
 }
 
 

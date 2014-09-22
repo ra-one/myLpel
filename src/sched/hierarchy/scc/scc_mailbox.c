@@ -34,7 +34,7 @@ struct mailbox_t {
 #ifdef _USE_MBX_DBG__
 #define MAILBOX_DBG_LOCK printf
 #define MAILBOX_DBG printf
-//#define MAILBOX_DBG_LIST
+#define MAILBOX_DBG_LIST
 #else
 #define MAILBOX_DBG_LOCK //
 #define MAILBOX_DBG	//
@@ -148,7 +148,7 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
   bool message=false,go_on=false;
   printf("-----------------------------------> in recv\n");
   while(go_on==false){
-  	counter++;
+  	//counter++;
     if(mbox->list_inbox != NULL){
       int value=-1;
       while(value != 0){
@@ -160,7 +160,7 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
     	counter++;
 	    //printf(". ");
     	if(mbox->list_inbox == NULL && counter == 1000) { 
-    		//printf(". %d\t",mbox->list_inbox); 
+    		printf(". %d\t",mbox->list_inbox); 
     		counter = 0; 
     	}
     }*/
@@ -178,7 +178,8 @@ void LpelMailboxRecv( mailbox_t *mbox, workermsg_t *msg)
 
   /* copy the message */
   *msg = node->msg;
-  int wid = msg->body.from_worker;
+  //int wid = msg->body.from_worker;
+  int wid = 101;
   /* put node into free pool */
   PutFree( mbox, node);
   printListInbox("Recv aftr",mbox);
