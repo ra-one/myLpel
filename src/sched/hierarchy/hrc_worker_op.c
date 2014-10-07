@@ -174,7 +174,8 @@ void decreaseFrequency(){
 /* evaluate waiting time of all workers, consider decrease cpu frequency */
 static void evaluateWaiting(masterctx_t *master, double cur) {
   // if wait_threshold is < 0 then do not change freq
-  if (master->wait_threshold < 0) return; 
+  //if (master->wait_threshold < 0) return; 
+  if (!isDvfsActive()) return; 
   
   master->count_wait++;
   
@@ -189,7 +190,7 @@ static void evaluateWaiting(masterctx_t *master, double cur) {
   int first = master->next_window_index; // when the window is full, the next index in the window is the first waiting time, i.e. the one will be overwritten next
   double observe_time = ((cur*1000000)-(master->window_start[first]*1000000));
   double prop_wait = wait*100.0/(master->num_workers * observe_time);
-  //printf("prop wait %f, %f\n", prop_wait, observe_time);
+  printf("\t\tprop wait %f\n", prop_wait);
   if (prop_wait > master->wait_threshold) {
     master->count_wait = 0;
     //printf("reduce frequency\n");
