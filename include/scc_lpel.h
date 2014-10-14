@@ -10,7 +10,7 @@
 #endif /*USE_SCC*/
 
 //called by sosi
-void decreaseFrequency();
-void increaseFrequency();
+void decreaseFrequency(double prop);
+void increaseFrequency(double prop);
 
 #endif /* _SCC_LPEL_H_ */

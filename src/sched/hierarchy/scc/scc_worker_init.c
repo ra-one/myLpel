@@ -103,6 +103,7 @@ void LpelWorkersInit(lpel_config_t *cfg) {
     master->window_start = (double *) malloc(sizeof(double) * master->window_size);
     master->next_window_index = 0;
     master->count_wait = 0;
+    printf("worker_init: cfg wt %f, ws %d, mst wt %f, ws %d\n",cfg->wait_threshold,cfg->wait_window_size,master->wait_threshold,master->window_size);
   } else{
     /*create single worker per core*/
     worker=(workerctx_t *) SCCMallocPtr(sizeof(workerctx_t));

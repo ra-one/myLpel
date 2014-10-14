@@ -158,24 +158,24 @@ static void sendWakeup(mailbox_t *mb, lpel_task_t *t)
  * MASTER FUNCTION
  ******************************************************************************/
 // only called by sosi
-void increaseFrequency(){
+void increaseFrequency(double prop){
   //printf("ah ha!! change cpu frequency please %f\n",SCCGetTime());
   workermsg_t msg;
   msg.type = WORKER_MSG_INC_FREQ;
+  msg.body.prop = prop;
   LpelMailboxSend(mastermb, &msg);
 }
 
 //only called by master
-void decreaseFrequency(){
+void decreaseFrequency(double prop){
   printf("Master: decrease frequency %f\n",SCCGetTime());
-  change_freq(0);
+  change_freq((prop*-1),'D');
 }
 
 /* evaluate waiting time of all workers, consider decrease cpu frequency */
 static void evaluateWaiting(masterctx_t *master, double cur) {
   // if wait_threshold is < 0 then do not change freq
-  //if (master->wait_threshold < 0) return; 
-  if (!isDvfsActive()) return; 
+  //if (master->wait_threshold < 0) return;
   
   master->count_wait++;
   
@@ -189,12 +189,13 @@ static void evaluateWaiting(masterctx_t *master, double cur) {
   }
   int first = master->next_window_index; // when the window is full, the next index in the window is the first waiting time, i.e. the one will be overwritten next
   double observe_time = ((cur*1000000)-(master->window_start[first]*1000000));
-  double prop_wait = wait*100.0/(master->num_workers * observe_time);
-  printf("\t\tprop wait %f\n", prop_wait);
+  //double prop_wait = wait*100.0/(master->num_workers * observe_time);
+  double prop_wait =  wait/(master->num_workers * observe_time);
+
   if (prop_wait > master->wait_threshold) {
     master->count_wait = 0;
     //printf("reduce frequency\n");
-    decreaseFrequency();
+    decreaseFrequency(prop_wait);
   }
 }
 
@@ -230,7 +231,7 @@ static int getWait(masterctx_t *master) {
   master->window_start[master->next_window_index] = master->start_worker_wait[worker]; /* only update when accounting new waiting period */
   master->next_window_index = (master->next_window_index + 1) % master->window_size;
   
-  evaluateWaiting(master, cur_time);
+  if (isDvfsActive()) evaluateWaiting(master, cur_time);
 
   return worker;
 }
@@ -300,6 +301,7 @@ static void MasterLoop(masterctx_t *master)
     MASTER_DBG("\n\n\nmaster: MSG received, handle it! %f\n",SCCGetTime());
 		lpel_task_t *t;
 		int wid;
+    double prop;
 		switch(msg.type) {
 		case WORKER_MSG_ASSIGN:
 			/* master receive a new task */
@@ -440,8 +442,9 @@ static void MasterLoop(masterctx_t *master)
 			break;
  
     case WORKER_MSG_INC_FREQ:
-      printf("Master: increase frequency %f\n",SCCGetTime());
-      change_freq(1);
+      prop = msg.body.prop; 
+      printf("Master: increase frequency %f by %f\n",SCCGetTime(),prop);
+      change_freq(prop,'I');
       break;
 
 		default:

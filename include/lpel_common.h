@@ -129,7 +129,7 @@ typedef struct {
   lpel_backend_type type;
   /* wait monitoring parameter */
   int wait_window_size;
-  int wait_threshold;
+  double wait_threshold;
 
 } lpel_config_t;
 

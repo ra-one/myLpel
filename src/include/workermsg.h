@@ -14,6 +14,7 @@ typedef struct {
   union {
     lpel_task_t    *task;
     int            from_worker;
+    double         prop; // proportion to increase frequency
   } body;
 } workermsg_t;
 
