@@ -1,4 +1,5 @@
 /*
+/*
  * hrc_worker_op.c
  *
  *  Created on: 17 Jul 2013
@@ -231,7 +232,7 @@ static int getWait(masterctx_t *master) {
   master->window_start[master->next_window_index] = master->start_worker_wait[worker]; /* only update when accounting new waiting period */
   master->next_window_index = (master->next_window_index + 1) % master->window_size;
   
-  if (isDvfsActive()) evaluateWaiting(master, cur_time);
+  //if (isDvfsActive()) evaluateWaiting(master, cur_time);
 
   return worker;
 }
@@ -288,14 +289,93 @@ static void updatePriorityNeigh(taskqueue_t *tq, lpel_task_t *t) {
 }
 
 
+static void checkFreqChangeINC(){
+  if(tryLock(16)){
+    if(FREQFLAG == 1){
+      double prop = FREQPROP;
+      printf("Master: increase frequency %f by %f\n",SCCGetTime(),prop);
+      change_freq(prop,'I');
+      FREQFLAG = 0;
+      FOOL_WRITE_COMBINE;
+    }
+    unlock(16);
+  }
+}
+
+/*
+static void checkFreqChangeDEC(){
+  if(waitingWorkers > 20){
+    double prop = -0.25;
+    printf("Master: decrease frequency %f by %f\n",SCCGetTime(),prop);
+    change_freq(prop,'D');
+  }
+}
+*/
+/*
+static void checkFreqChangeDEC(){
+  static double ema=0;
+  ema = (ema * (1-0.0005)) + (waitingWorkers * 0.0005);
+  
+  if(ema > 2.5){
+    double prop = -0.25;
+    printf("Master: decrease frequency %f by %f\n",SCCGetTime(),prop);
+    change_freq(prop,'D');
+  }
+}*/
+
+static double checkFreqChangeDEC(){
+  static double ema=0.0;
+  static int flag=1,counter=0;
+  // only count when flag is not set
+  if(flag == 0 && ++counter%50 == 0) flag = 1;
+  
+  //ema = (ema * (1-0.0005)) + (waitingWorkers * 0.0005);
+  ema = (ema * (1-0.0001)) + (waitingWorkers * 0.0001); //9
+  
+  DEMA = ema;
+  FOOL_WRITE_COMBINE;
+  //if(ema > 2.5 && flag){
+  //if(ema > 3.5 && flag){ // for 1610 6
+  //if(ema > 3 && flag){ // for 1610 7 8 9
+  //if(ema > 3.6 && flag){ // for 1610 10 1 3 high
+  if(ema > 2.4 && flag){ // for 1610 10 2 4 low
+    //double prop = -0.5;
+    double prop = -0.35; // more fine grained from 800 to 520
+    printf("Master: decrease frequency %f by %f\n",SCCGetTime(),prop);
+    change_freq(prop,'D');
+    flag=0;
+  }
+  return ema;
+}
+
+
+/*
+static void checkFreqChangeDEC(){
+  static int flag=1;
+  static int counter=0;
+  counter++;
+  
+  if(waitingWorkers > 20 && waitingWorkers < 23 && flag && counter = 0){
+    counter = 0;
+    double prop = -0.25;
+    printf("Master: decrease frequency %f by %f\n",SCCGetTime(),prop);
+    change_freq(prop,'D');
+  }
+}*/
+
 static void MasterLoop(masterctx_t *master)
 {
   //FILE *waitingTaskLogFile = fopen("/shared/nil/Out/waitingTask.log", "w");
+  double ema=0.0;
   
 	MASTER_DBG("start master\n");
 	do {
 		workermsg_t msg;
-
+    
+    checkFreqChangeINC();
+    //if( requestServiced%100 == 0 ) checkFreqChangeDEC();
+    ema = checkFreqChangeDEC();
+    
 		LpelMailboxRecv(mastermb, &msg);
     requestServiced++;
     MASTER_DBG("\n\n\nmaster: MSG received, handle it! %f\n",SCCGetTime());
@@ -442,16 +522,16 @@ static void MasterLoop(masterctx_t *master)
 			break;
  
     case WORKER_MSG_INC_FREQ:
-      prop = msg.body.prop; 
-      printf("Master: increase frequency %f by %f\n",SCCGetTime(),prop);
-      change_freq(prop,'I');
+      //prop = msg.body.prop; 
+      //printf("Master: increase frequency %f by %f\n",SCCGetTime(),prop);
+      //change_freq(prop,'I');
       break;
 
 		default:
 			assert(0);
 		}
     MASTER_DBG("TaskqueueSize %d, WrapperqueueSize %d\n\n",LpelTaskqueueSize(master->ready_tasks),LpelTaskqueueSize(master->ready_wrappers));
-    printf("TaskqueueSize %d, WaitingWorkers %d\n",LpelTaskqueueSize(master->ready_tasks),waitingWorkers);
+    printf("TaskqueueSize %d, WaitingWorkers %d, ema %f\n",LpelTaskqueueSize(master->ready_tasks),waitingWorkers,ema);
     //fprintf(waitingTaskLogFile,"%d##%d\n",LpelTaskqueueSize(master->ready_tasks),waitingWorkers);
 	} while (!(master->terminate && LpelTaskqueueSize(master->ready_tasks) == 0));
 }
