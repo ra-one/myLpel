@@ -302,69 +302,82 @@ static void checkFreqChangeINC(){
   }
 }
 
-/*
-static void checkFreqChangeDEC(){
-  if(waitingWorkers > 20){
-    double prop = -0.25;
-    printf("Master: decrease frequency %f by %f\n",SCCGetTime(),prop);
-    change_freq(prop,'D');
-  }
-}
-*/
-/*
-static void checkFreqChangeDEC(){
-  static double ema=0;
-  ema = (ema * (1-0.0005)) + (waitingWorkers * 0.0005);
-  
-  if(ema > 2.5){
-    double prop = -0.25;
-    printf("Master: decrease frequency %f by %f\n",SCCGetTime(),prop);
-    change_freq(prop,'D');
-  }
-}*/
-
 static double checkFreqChangeDEC(){
   static double ema=0.0;
   static int flag=1,counter=0;
   // only count when flag is not set
   if(flag == 0 && ++counter%50 == 0) flag = 1;
   
-  //ema = (ema * (1-0.0005)) + (waitingWorkers * 0.0005);
-  ema = (ema * (1-0.0001)) + (waitingWorkers * 0.0001); //9
+  ema = (ema * (1-0.0001)) + (waitingWorkers * 0.0001);
   
   DEMA = ema;
   FOOL_WRITE_COMBINE;
-  //if(ema > 2.5 && flag){
-  //if(ema > 3.5 && flag){ // for 1610 6
-  //if(ema > 3 && flag){ // for 1610 7 8 9
-  //if(ema > 3.6 && flag){ // for 1610 10 1 3 high
-  if(ema > 2.4 && flag){ // for 1610 10 2 4 low
-    //double prop = -0.5;
+  if(ema > 3 && flag){ // decrease
     double prop = -0.35; // more fine grained from 800 to 520
     printf("Master: decrease frequency %f by %f\n",SCCGetTime(),prop);
     change_freq(prop,'D');
     flag=0;
-  }
+  }  
   return ema;
 }
 
 
-/*
-static void checkFreqChangeDEC(){
-  static int flag=1;
-  static int counter=0;
-  counter++;
+static double checkFreqChange(){
+  static double ema=0.0;
+  static int flag=1,counter=0;
+  // only count when flag is not set
+  if(flag == 0 && ++counter%50 == 0) flag = 1;
   
-  if(waitingWorkers > 20 && waitingWorkers < 23 && flag && counter = 0){
-    counter = 0;
-    double prop = -0.25;
-    printf("Master: decrease frequency %f by %f\n",SCCGetTime(),prop);
+  ema = (ema * (1-0.00005)) + (waitingWorkers * 0.00005);
+  
+  EMA = ema;
+  FOOL_WRITE_COMBINE;
+  if(ema > 1.2 && flag){ // decrease
+    double prop = -0.35; // more fine grained from 800 to 520
+    printf("Master: decrease frequency %f\n",SCCGetTime());
     change_freq(prop,'D');
+    flag=0;
   }
-}*/
+  
+  if(ema < 1 && flag){ // increase
+    double prop = 0.35; // more fine grained from 800 to 520
+    printf("Master: increase frequency %f\n",SCCGetTime());
+    change_freq(prop,'I');
+    flag=0;
+  }
+  
+  return ema;
+}
+
+static double checkFreqChangeNK(){
+  static double ema=0.0;
+  static int flag=1,counter=0;
+  // only count when flag is not set
+  if(flag == 0 && ++counter%200 == 0) flag = 1;
+  
+  ema = (ema * (1-0.0001)) + (waitingWorkers * 0.0001);
+  
+  EMA = ema;
+  FOOL_WRITE_COMBINE;
+  
+  if(waitingWorkers > 30 && flag){ // decrease
+    double prop = -0.35; // more fine grained from 800 to 520
+    printf("Master: decrease frequency %f\n",SCCGetTime());
+    change_freq(prop,'D');
+    flag=0;
+  } else if(ema < 10 && flag){ // increase
+    double prop = 0.35; // more fine grained from 800 to 520
+    printf("Master: increase frequency %f\n",SCCGetTime());
+    change_freq(prop,'I');
+    flag=0;
+  }
+  
+  return ema;
+}
 
 static void MasterLoop(masterctx_t *master)
 {
+  static int ctr = 0;
   //FILE *waitingTaskLogFile = fopen("/shared/nil/Out/waitingTask.log", "w");
   double ema=0.0;
   
@@ -372,9 +385,9 @@ static void MasterLoop(masterctx_t *master)
 	do {
 		workermsg_t msg;
     
-    checkFreqChangeINC();
-    //if( requestServiced%100 == 0 ) checkFreqChangeDEC();
-    ema = checkFreqChangeDEC();
+    //checkFreqChangeINC();
+    //ema = checkFreqChangeDEC();
+    if(DVFS == 1) { ema = checkFreqChange(); }
     
 		LpelMailboxRecv(mastermb, &msg);
     requestServiced++;
@@ -530,6 +543,11 @@ static void MasterLoop(masterctx_t *master)
 		default:
 			assert(0);
 		}
+    if(ctr++ > 1000){
+      ctr = 0;
+      SCC_Free_Ptr_rpc_to_local();
+    }
+      
     MASTER_DBG("TaskqueueSize %d, WrapperqueueSize %d\n\n",LpelTaskqueueSize(master->ready_tasks),LpelTaskqueueSize(master->ready_wrappers));
     printf("TaskqueueSize %d, WaitingWorkers %d, ema %f\n",LpelTaskqueueSize(master->ready_tasks),waitingWorkers,ema);
     //fprintf(waitingTaskLogFile,"%d##%d\n",LpelTaskqueueSize(master->ready_tasks),waitingWorkers);
@@ -582,6 +600,7 @@ void LpelWorkersTerminate(void) {
  ******************************************************************************/
 static void WrapperLoop(workerctx_t *wp)
 {
+  static int ctr = 0;
 	lpel_task_t *t = NULL;
 	workermsg_t msg;
   
@@ -641,6 +660,10 @@ FirstTask:
 				break;
 			}
 		}
+    if(ctr++ > 10){
+      ctr = 0;
+      SCC_Free_Ptr_rpc_to_local();
+    }  
 	} while (!wp->terminate);
 	LpelTaskDestroy(wp->current_task);
 	/* cleanup task context marked for deletion */
@@ -701,6 +724,8 @@ void LpelWorkerBroadcast(workermsg_t *msg)
 
 static void WorkerLoop(workerctx_t *wc)
 {
+  static int ctr = 0; //when counter is 5 free memory blocks
+  
 	WORKER_DBG("start worker %d\n", wc->wid);
 
   lpel_task_t *t = NULL;
@@ -748,6 +773,10 @@ static void WorkerLoop(workerctx_t *wc)
   	  	break;
   	  }
   	  // reach here --> message request for task has been sent
+      if(ctr++ > 10){
+        ctr = 0;
+        SCC_Free_Ptr_rpc_to_local();
+      }
       WORKER_DBG("!(wc->terminate) %d\n\n",(!(wc->terminate)));
   } while (!(wc->terminate) );
 }
