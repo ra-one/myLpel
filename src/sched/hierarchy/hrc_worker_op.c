@@ -158,95 +158,19 @@ static void sendWakeup(mailbox_t *mb, lpel_task_t *t)
 /*******************************************************************************
  * MASTER FUNCTION
  ******************************************************************************/
-// only called by sosi
-void increaseFrequency(double prop){
-  //printf("ah ha!! change cpu frequency please %f\n",SCCGetTime());
-  workermsg_t msg;
-  msg.type = WORKER_MSG_INC_FREQ;
-  msg.body.prop = prop;
-  LpelMailboxSend(mastermb, &msg);
-}
-
-//only called by master
-void decreaseFrequency(double prop){
-  printf("Master: decrease frequency %f\n",SCCGetTime());
-  change_freq((prop*-1),'D');
-}
-
-/* evaluate waiting time of all workers, consider decrease cpu frequency */
-static void evaluateWaiting(masterctx_t *master, double cur) {
-  // if wait_threshold is < 0 then do not change freq
-  //if (master->wait_threshold < 0) return;
-  
-  master->count_wait++;
-  
-  // skip when waiting window is not full
-  if (master->count_wait < master->window_size) return;
-
-  int i;
-  double wait = 0.0;
-  for (i = 0; i < master->window_size; i++) {
-    wait = wait + master->window_wait[i];
-  }
-  int first = master->next_window_index; // when the window is full, the next index in the window is the first waiting time, i.e. the one will be overwritten next
-  double observe_time = ((cur*1000000)-(master->window_start[first]*1000000));
-  //double prop_wait = wait*100.0/(master->num_workers * observe_time);
-  double prop_wait =  wait/(master->num_workers * observe_time);
-
-  if (prop_wait > master->wait_threshold) {
-    master->count_wait = 0;
-    //printf("reduce frequency\n");
-    decreaseFrequency(prop_wait);
-  }
-}
-
-/* add a worker to the waiting list */
-static void addWait(masterctx_t *master, int worker) {
-  if (master->first_wait == master->next_wait) { //array of waiting worker must be either empty or full
-    assert(master->waitworkers[master->first_wait] == -1); // can not be full
-  }
-  master->waitworkers[master->next_wait] = worker;
-  master->next_wait = (master->next_wait + 1) % master->num_workers;
-  // get time when it start waiting
-  master->start_worker_wait[worker] = SCCGetTime();
-  waitingWorkers++;
-}
-
-/* get the first waiting worker, if non, return -1 */
-static int getWait(masterctx_t *master) {
-  //array of waiting worker must be either empty or full
-  if (master->first_wait == master->next_wait) { 
-     // array is empty return -1
-    if (master->waitworkers[master->first_wait] == -1) return -1;
-  }
-
-  int worker = master->waitworkers[master->first_wait];
-  master->waitworkers[master->first_wait] = -1;
-  master->first_wait = (master->first_wait + 1) % master->num_workers;
-
-  // get time when it stop waiting
-  double cur_time = SCCGetTime();
-  
-  double wait = ((cur_time*1000000)-(master->start_worker_wait[worker]*1000000));
-  master->window_wait[master->next_window_index] = wait;
-  master->window_start[master->next_window_index] = master->start_worker_wait[worker]; /* only update when accounting new waiting period */
-  master->next_window_index = (master->next_window_index + 1) % master->window_size;
-  
-  //if (isDvfsActive()) evaluateWaiting(master, cur_time);
-
-  return worker;
-}
-
 static int servePendingReq(masterctx_t *master, lpel_task_t *t) {
-  int w;
-  t->sched_info.prior = LpelTaskCalPriority(t);
-  w = getWait(master);
-  if (w != -1) {
-    WORKER_DBG("master: send task %d to waiting worker %d\n", t->uid, w);
-    sendTask(w, t);
-    waitingWorkers--;
-  }
-  return w;
+	int i;
+	//t->sched_info.prio = LpelTaskCalPriority(t);
+	for (i = 0; i < num_workers; i++){
+		if (master->waitworkers[i] == 1) {
+			master->waitworkers[i] = 0;
+			WORKER_DBG("master: serve pending request, send task %d to worker %d\n", t->uid, i);
+			sendTask(i, t);
+      waitingWorkers--;
+			return i;
+		}
+	}
+	return -1;
 }
 
 static int servePendingWrap(masterctx_t *master, lpel_task_t *t) {
@@ -303,98 +227,45 @@ static void checkFreqChangeINC(){
 }
 
 static double checkFreqChangeDEC(){
-  static double ema=0.0;
+  // use alphaw and thw
+  static double dema=0.0;
   static int flag=1,counter=0;
   // only count when flag is not set
   if(flag == 0 && ++counter%50 == 0) flag = 1;
   
-  ema = (ema * (1-0.0001)) + (waitingWorkers * 0.0001);
+  dema = (dema * (1-ALPHAW)) + (waitingWorkers * ALPHAW);
   
-  DEMA = ema;
+  DEMA = dema;
   FOOL_WRITE_COMBINE;
-  if(ema > 3 && flag){ // decrease
+  if(dema > THW && flag){ // decrease
     double prop = -0.35; // more fine grained from 800 to 520
     printf("Master: decrease frequency %f by %f\n",SCCGetTime(),prop);
     change_freq(prop,'D');
     flag=0;
   }  
-  return ema;
-}
-
-
-static double checkFreqChange(){
-  static double ema=0.0;
-  static int flag=1,counter=0;
-  // only count when flag is not set
-  if(flag == 0 && ++counter%50 == 0) flag = 1;
-  
-  ema = (ema * (1-0.00005)) + (waitingWorkers * 0.00005);
-  
-  EMA = ema;
-  FOOL_WRITE_COMBINE;
-  if(ema > 1.2 && flag){ // decrease
-    double prop = -0.35; // more fine grained from 800 to 520
-    printf("Master: decrease frequency %f\n",SCCGetTime());
-    change_freq(prop,'D');
-    flag=0;
-  }
-  
-  if(ema < 1 && flag){ // increase
-    double prop = 0.35; // more fine grained from 800 to 520
-    printf("Master: increase frequency %f\n",SCCGetTime());
-    change_freq(prop,'I');
-    flag=0;
-  }
-  
-  return ema;
-}
-
-static double checkFreqChangeNK(){
-  static double ema=0.0;
-  static int flag=1,counter=0;
-  // only count when flag is not set
-  if(flag == 0 && ++counter%200 == 0) flag = 1;
-  
-  ema = (ema * (1-0.0001)) + (waitingWorkers * 0.0001);
-  
-  EMA = ema;
-  FOOL_WRITE_COMBINE;
-  
-  if(waitingWorkers > 30 && flag){ // decrease
-    double prop = -0.35; // more fine grained from 800 to 520
-    printf("Master: decrease frequency %f\n",SCCGetTime());
-    change_freq(prop,'D');
-    flag=0;
-  } else if(ema < 10 && flag){ // increase
-    double prop = 0.35; // more fine grained from 800 to 520
-    printf("Master: increase frequency %f\n",SCCGetTime());
-    change_freq(prop,'I');
-    flag=0;
-  }
-  
-  return ema;
+  return dema;
 }
 
 static void MasterLoop(masterctx_t *master)
 {
-  static int ctr = 0;
-  //FILE *waitingTaskLogFile = fopen("/shared/nil/Out/waitingTask.log", "w");
-  double ema=0.0;
+  FILE *waitingTaskLogFile = fopen("/shared/nil/Out/waitingWorker.log", "w");
+  printf("ALPHAW %f, THW %f\n", ALPHAW,THW);
   
 	MASTER_DBG("start master\n");
 	do {
 		workermsg_t msg;
-    
-    //checkFreqChangeINC();
-    //ema = checkFreqChangeDEC();
-    if(DVFS == 1) { ema = checkFreqChange(); }
+
+    if(DVFS == 1) { 
+      checkFreqChangeINC();
+      checkFreqChangeDEC(); 
+    }
     
 		LpelMailboxRecv(mastermb, &msg);
     requestServiced++;
     MASTER_DBG("\n\n\nmaster: MSG received, handle it! %f\n",SCCGetTime());
 		lpel_task_t *t;
 		int wid;
-    double prop;
+
 		switch(msg.type) {
 		case WORKER_MSG_ASSIGN:
 			/* master receive a new task */
@@ -511,13 +382,15 @@ static void MasterLoop(masterctx_t *master)
         MASTER_DBG("master: task request from worker %d\n", wid);
         t = LpelTaskqueuePeek(master->ready_tasks);
         if (t == NULL) {
-          addWait(master, wid);
+          master->waitworkers[wid] = 1;
+          waitingWorkers++;
           MASTER_DBG("master: worker %d put into wait worker que\n", wid);
         } else {
 
 #ifdef _USE_NEG_DEMAND_LIMIT_
           if (t->sched_info.prior == LPEL_DBL_MIN) {		// if not schedule task if it has too low priority
-            addWait(master, wid);
+            master->waitworkers[wid] = 1;
+            waitingWorkers++;
             break;
           }
 #endif
@@ -535,7 +408,7 @@ static void MasterLoop(masterctx_t *master)
 			break;
  
     case WORKER_MSG_INC_FREQ:
-      //prop = msg.body.prop; 
+      //double prop = msg.body.prop; 
       //printf("Master: increase frequency %f by %f\n",SCCGetTime(),prop);
       //change_freq(prop,'I');
       break;
@@ -543,14 +416,9 @@ static void MasterLoop(masterctx_t *master)
 		default:
 			assert(0);
 		}
-    if(ctr++ > 1000){
-      ctr = 0;
-      SCC_Free_Ptr_rpc_to_local();
-    }
-      
+    
     MASTER_DBG("TaskqueueSize %d, WrapperqueueSize %d\n\n",LpelTaskqueueSize(master->ready_tasks),LpelTaskqueueSize(master->ready_wrappers));
-    printf("TaskqueueSize %d, WaitingWorkers %d, ema %f\n",LpelTaskqueueSize(master->ready_tasks),waitingWorkers,ema);
-    //fprintf(waitingTaskLogFile,"%d##%d\n",LpelTaskqueueSize(master->ready_tasks),waitingWorkers);
+    fprintf(waitingTaskLogFile,"%d~%d#",LpelTaskqueueSize(master->ready_tasks),waitingWorkers);
 	} while (!(master->terminate && LpelTaskqueueSize(master->ready_tasks) == 0));
 }
 
@@ -600,7 +468,6 @@ void LpelWorkersTerminate(void) {
  ******************************************************************************/
 static void WrapperLoop(workerctx_t *wp)
 {
-  static int ctr = 0;
 	lpel_task_t *t = NULL;
 	workermsg_t msg;
   
@@ -660,10 +527,6 @@ FirstTask:
 				break;
 			}
 		}
-    if(ctr++ > 10){
-      ctr = 0;
-      SCC_Free_Ptr_rpc_to_local();
-    }  
 	} while (!wp->terminate);
 	LpelTaskDestroy(wp->current_task);
 	/* cleanup task context marked for deletion */
@@ -724,8 +587,6 @@ void LpelWorkerBroadcast(workermsg_t *msg)
 
 static void WorkerLoop(workerctx_t *wc)
 {
-  static int ctr = 0; //when counter is 5 free memory blocks
-  
 	WORKER_DBG("start worker %d\n", wc->wid);
 
   lpel_task_t *t = NULL;
@@ -773,10 +634,6 @@ static void WorkerLoop(workerctx_t *wc)
   	  	break;
   	  }
   	  // reach here --> message request for task has been sent
-      if(ctr++ > 10){
-        ctr = 0;
-        SCC_Free_Ptr_rpc_to_local();
-      }
       WORKER_DBG("!(wc->terminate) %d\n\n",(!(wc->terminate)));
   } while (!(wc->terminate) );
 }
