@@ -214,7 +214,7 @@ static void updatePriorityNeigh(taskqueue_t *tq, lpel_task_t *t) {
 
 
 static void checkFreqChangeINC(){
-  if(tryLock(16)){
+  if(tryLock(freqLCK)){
     if(FREQFLAG == 1){
       double prop = FREQPROP;
       printf("Master: increase frequency %f by %f\n",SCCGetTime(),prop);
@@ -222,7 +222,7 @@ static void checkFreqChangeINC(){
       FREQFLAG = 0;
       FOOL_WRITE_COMBINE;
     }
-    unlock(16);
+    unlock(freqLCK);
   }
 }
 
@@ -249,6 +249,7 @@ static double checkFreqChangeDEC(){
 static void MasterLoop(masterctx_t *master)
 {
   FILE *waitingTaskLogFile = fopen("/shared/nil/Out/waitingWorker.log", "w");
+  fprintf(waitingTaskLogFile,"wtask~wworker#");
   printf("ALPHAW %f, THW %f\n", ALPHAW,THW);
   
 	MASTER_DBG("start master\n");
