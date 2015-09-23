@@ -158,8 +158,8 @@ static void sendWakeup(mailbox_t *mb, lpel_task_t *t)
 /*******************************************************************************
  * MASTER FUNCTION
  ******************************************************************************/
-static int servePendingReq(masterctx_t *master, lpel_task_t *t) {
-	int i;
+static int servePendingReq1(masterctx_t *master, lpel_task_t *t) {
+	int i = 0;
 	//t->sched_info.prio = LpelTaskCalPriority(t);
 	for (i = 0; i < num_workers; i++){
 		if (master->waitworkers[i] == 1) {
@@ -172,6 +172,26 @@ static int servePendingReq(masterctx_t *master, lpel_task_t *t) {
 	}
 	return -1;
 }
+
+static int servePendingReq(masterctx_t *master, lpel_task_t *t) {
+	static int i = 0;
+  int end = i; 
+
+	do {
+		if (master->waitworkers[i] == 1) {
+			master->waitworkers[i] = 0;
+			WORKER_DBG("master: serve pending request, send task %d to worker %d\n", t->uid, i);
+			sendTask(i, t);
+      waitingWorkers--;
+			int res = i;
+      i = ( i + 1 ) % num_workers;
+      return res;
+		} 
+    i = ( i + 1 ) % num_workers;
+	} while ( i != end );
+	return -1;
+}
+
 
 static int servePendingWrap(masterctx_t *master, lpel_task_t *t) {
 	int i;
@@ -226,6 +246,15 @@ static void checkFreqChangeINC(){
   }
 }
 
+static double writeDEMA(){
+  static double dema=0.0;
+  dema = (dema * (1-ALPHAW)) + (waitingWorkers * ALPHAW);
+  
+  DEMA = dema;
+  FOOL_WRITE_COMBINE;
+  return dema;
+}
+  
 static double checkFreqChangeDEC(){
   // use alphaw and thw
   static double dema=0.0;
@@ -259,6 +288,8 @@ static void MasterLoop(masterctx_t *master)
     if(DVFS == 1) { 
       checkFreqChangeINC();
       checkFreqChangeDEC(); 
+    } else {
+      writeDEMA();
     }
     
 		LpelMailboxRecv(mastermb, &msg);
